@@ -6,6 +6,7 @@ import {
   Eye, LogOut, Image, Zap, Skull
 } from 'lucide-react';
 
+// Genera 50 codici PRO casuali + i 10 di base
 const PRO_KEYS = Array.from({ length: 60 }, (_, i) => `NBL-PRO-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
 PRO_KEYS.splice(0, 10, "NBL-PRO-A1B2-C3D4", "NBL-PRO-X9Y8-Z7W6", "NBL-PRO-Q1W2-E3R4", "NBL-PRO-T5Y6-U7I8", "NBL-PRO-O9P0-A1S2", "NBL-PRO-D3F4-G5H6", "NBL-PRO-J7K8-L9Z0", "NBL-PRO-X1C2-V3B4", "NBL-PRO-N5M6-Q7W8", "NBL-PRO-E9R0-T1Y2");
 
@@ -16,11 +17,11 @@ const DEFAULT_STATE = {
   isAuth: false,
   user: { id: '', name: 'Guest', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' },
   portfolio: { cash: 10000.00, holdings: {} },
-  // L'API Key tenta di leggere prima da file .env (Vite), altrimenti usa quella fissa fornita.
+  // Chiave OpenAI Fornita (può essere sovrascritta da Vercel env se necessario)
   keys: { openai: import.meta.env?.VITE_OPENAI_API_KEY || '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' },
   ui: { activeTab: 'markets', activeMarketType: 'stocks', activeAsset: 'SNEB', chartType: 'candle', chartZoom: 60, activeChatRoom: 'global' },
   chatHistory: { global: [], ai: [] },
-  dmRooms: [], // Traccia le chat private aperte
+  dmRooms: [], // Es: [{ id: 'dm-daniel123', display: 'Daniel#1234' }]
   customAssets: [],
   assetsData: {},
   gameTime: { hours: 9, minutes: 0 }
@@ -69,19 +70,18 @@ class MarketAsset {
   }
 
   _generateTick(openPrice, timestamp, isUserPro, isUserProMax) {
+    // Gestione speciale Federicocoin
     if (this.isCrashed && this.ticker === 'FEDE') return { time: timestamp, open: openPrice, high: openPrice, low: openPrice, close: openPrice };
-    
     if (this.ticker === 'FEDE') {
-      const upPrice = openPrice * 1.08; // Crescita irreale
-      return { time: timestamp, open: openPrice, high: upPrice * 1.02, low: openPrice, close: upPrice };
+      const upPrice = openPrice * 1.15; // Sale rapidissimamente prima del crash
+      return { time: timestamp, open: openPrice, high: upPrice * 1.05, low: openPrice, close: upPrice };
     }
 
     let drift = (this.isPro && isUserPro) ? 0.0005 : -0.0002; 
     
-    // Algoritmo prolifico estremo per asset PRO MAX se l'utente ha l'abbonamento Max
-    if (this.isProMax && isUserProMax) {
-      drift += 0.0025; // Drift massicciamente positivo
-    }
+    // Algoritmo MOLTO prolifico per i PRO MAX
+    if (this.isProMax && isUserProMax) drift += 0.006; 
+    else if (this.isPro && !this.isProMax && isUserPro) drift += 0.0015;
 
     let closePrice = openPrice * (1 + drift + (Math.random() - 0.5) * this.volatility);
     if (Math.random() < 0.05) closePrice *= (1 + (Math.random() * this.volatility * 5) * (Math.random() > 0.6 ? 1 : -1)); 
@@ -125,43 +125,47 @@ export default function App() {
 
   useEffect(() => {
     const defaultAssets = {
-      // STOCKS BASE & MODIFICATE
-      'SNEB': new MarketAsset('stocks', 'SNEB', 'Studio Nebula', 150.0, 0.015, 'Tech', '€2.5B', 'Design AI e sviluppo.', { ceo: 'Daniel Belletti', founded: '2024', employees: '2', dividend: '1.20%' }),
-      'SHPX': new MarketAsset('stocks', 'SHPX', 'Shoppix', 45.0, 0.03, 'E-Commerce', '€800M', 'Retail droni.', { ceo: 'Daniel Belletti', founded: '2025', employees: '1', dividend: '0.00%' }),
-      'CAST': new MarketAsset('stocks', 'CAST', 'Castro architectury', 85.0, 0.01, 'Real Estate', '€1.2B', 'Zero emissioni.', { ceo: 'Un giovine', founded: '2024', employees: 'N/A', dividend: '3.50%' }),
-      'MINE': new MarketAsset('stocks', 'MINE', 'Minemarket', 12.0, 0.05, 'Estrazione', '€350M', 'Attrezzature.', { ceo: 'Francesco Busetta', founded: '2025', employees: '1', dividend: '4.10%' }),
-      'ROMS': new MarketAsset('stocks', 'ROMS', 'Romea Servizi', 120.0, 0.005, 'Pubblico', '€5.1B', 'Utilities.', { ceo: 'Entità sopranatturale', founded: 'Big bang', employees: 'Gesù di Nazareth, Mario roggero, etc...', dividend: '5.00%' }),
+      // 1. BASE STOCKS (Lore Aggiornata Esattamente come richiesto)
+      'SNEB': new MarketAsset('stocks', 'SNEB', 'Studio Nebula', 150.0, 0.015, 'Tech', '€2.5B', 'Agenzia di design e sviluppo software con focus su AI ed esperienze immersive.', { ceo: 'Daniel Belletti', founded: '2024', employees: '2', dividend: '1.20%' }),
+      'SHPX': new MarketAsset('stocks', 'SHPX', 'Shoppix', 45.0, 0.03, 'E-Commerce', '€800M', 'Piattaforma di retail decentralizzato con consegne via droni e logistica automatizzata.', { ceo: 'Daniel Belletti', founded: '2025', employees: '1', dividend: '0.00%' }),
+      'CAST': new MarketAsset('stocks', 'CAST', 'Castro architectury', 85.0, 0.01, 'Real Estate', '€1.2B', 'Studio di architettura e costruzioni urbane ad alta sostenibilità e zero emissioni.', { ceo: 'Un giovine', founded: '2024', employees: 'N/A', dividend: '3.50%' }),
+      'MINE': new MarketAsset('stocks', 'MINE', 'Minemarket', 12.0, 0.05, 'Estrazione', '€350M', 'Compagnia specializzata in attrezzature estrazione.', { ceo: 'Francesco Busetta', founded: '2025', employees: '1', dividend: '4.10%' }),
+      'ROMS': new MarketAsset('stocks', 'ROMS', 'Romea Servizi', 120.0, 0.005, 'Pubblico', '€5.1B', 'Gestione utilities. Asset difensivo a bassa volatilità.', { ceo: 'Entità sopranatturale', founded: 'Big bang', employees: 'Gesù di Nazareth, Mario roggero, etc...', dividend: '5.00%' }),
       
-      'AAPL': new MarketAsset('stocks', 'AAPL', 'Apple Inc.', 185.0, 0.012, 'Tech', '€2.8T', 'Elettronica.', { ceo: 'Tim Cook', founded: '1976', employees: '164,000', dividend: '0.50%' }),
-      'TSLA': new MarketAsset('stocks', 'TSLA', 'Tesla', 220.0, 0.04, 'Auto', '€700B', 'Veicoli EV.', { ceo: 'Elon Musk', founded: '2003', employees: '127,000', dividend: '0.00%' }),
-      'MSFT': new MarketAsset('stocks', 'MSFT', 'Microsoft', 410.0, 0.01, 'Software', '€3.0T', 'OS e Cloud.', { ceo: 'Satya Nadella', founded: '1975', employees: '221,000', dividend: '0.80%' }),
-      'AMZN': new MarketAsset('stocks', 'AMZN', 'Amazon', 175.0, 0.015, 'Retail', '€1.8T', 'E-commerce.', { ceo: 'Andy Jassy', founded: '1994', employees: '1,500,000', dividend: '0.00%' }),
-      'JNJ': new MarketAsset('stocks', 'JNJ', 'Johnson & Johnson', 155.0, 0.008, 'Pharma', '€400B', 'Salute.', { ceo: 'Joaquin Duato', founded: '1886', employees: '152,000', dividend: '3.00%' }),
+      // 2. REAL STOCKS (Standard 5)
+      'AAPL': new MarketAsset('stocks', 'AAPL', 'Apple Inc.', 185.0, 0.012, 'Tech', '€2.8T', 'Elettronica di consumo e servizi software.', { ceo: 'Tim Cook', founded: '1976', employees: '164,000', dividend: '0.50%' }),
+      'TSLA': new MarketAsset('stocks', 'TSLA', 'Tesla', 220.0, 0.04, 'Auto', '€700B', 'Veicoli elettrici e batterie solari.', { ceo: 'Elon Musk', founded: '2003', employees: '127,000', dividend: '0.00%' }),
+      'MSFT': new MarketAsset('stocks', 'MSFT', 'Microsoft', 410.0, 0.01, 'Software', '€3.0T', 'Sistemi operativi e cloud computing.', { ceo: 'Satya Nadella', founded: '1975', employees: '221,000', dividend: '0.80%' }),
+      'AMZN': new MarketAsset('stocks', 'AMZN', 'Amazon', 175.0, 0.015, 'Retail', '€1.8T', 'Leader mondiale E-commerce e AWS.', { ceo: 'Andy Jassy', founded: '1994', employees: '1,500,000', dividend: '0.00%' }),
+      'JNJ': new MarketAsset('stocks', 'JNJ', 'Johnson & Johnson', 155.0, 0.008, 'Pharma', '€400B', 'Farmaceutica e dispositivi medici.', { ceo: 'Joaquin Duato', founded: '1886', employees: '152,000', dividend: '3.00%' }),
 
-      // STOCKS PRO MAX (Molto Prolifiche)
-      'MRCH': new MarketAsset('promax_stocks', 'MRCH', 'Marchetti', 200.0, 0.06, 'Lusso', '€4.8B', 'Holding moda ad alta crescita.', { ceo: 'Aura in persona', founded: '1967 (hanno aperto domani)', employees: 'Motivi familiari', dividend: '2.80%' }, false, true),
-      'NVDA': new MarketAsset('promax_stocks', 'NVDA', 'NVIDIA', 950.0, 0.035, 'Semiconductors', '€2.2T', 'GPU e AI.', { ceo: 'Jensen Huang', founded: '1993', employees: '26,000', dividend: '0.02%' }, false, true),
-      'META': new MarketAsset('promax_stocks', 'META', 'Meta Platforms', 480.0, 0.025, 'Social', '€1.2T', 'Realtà Virtuale.', { ceo: 'Mark Zuckerberg', founded: '2004', employees: '67,000', dividend: '0.40%' }, false, true),
+      // 3. REAL STOCKS (PRO 3)
+      'GOOGL': new MarketAsset('stocks', 'GOOGL', 'Alphabet', 165.0, 0.015, 'Tech', '€2.0T', 'Motore di ricerca e intelligenza artificiale.', { ceo: 'Sundar Pichai', founded: '1998', employees: '182,000', dividend: '0.00%' }, true),
+      'NFLX': new MarketAsset('stocks', 'NFLX', 'Netflix', 600.0, 0.025, 'Media', '€260B', 'Streaming e produzione multimediale.', { ceo: 'Ted Sarandos', founded: '1997', employees: '12,800', dividend: '0.00%' }, true),
+      'DIS': new MarketAsset('stocks', 'DIS', 'Walt Disney', 110.0, 0.015, 'Intrattenimento', '€200B', 'Parchi a tema e intrattenimento.', { ceo: 'Bob Iger', founded: '1923', employees: '225,000', dividend: '1.20%' }, true),
 
-      // CRYPTO BASE
-      'SOL': new MarketAsset('crypto', 'SOL', 'Solana', 140.0, 0.025, 'DeFi', '€65B', 'Rete veloce.', { ceo: 'Anatoly Yakovenko', founded: '2020', employees: '0', dividend: '0.00%' }),
-      'DOGE': new MarketAsset('crypto', 'DOGE', 'Dogecoin', 0.15, 0.05, 'Meme', '€20B', 'Meme coin.', { ceo: 'Billy Markus', founded: '2013', employees: '0', dividend: '0.00%' }),
-      'BNB': new MarketAsset('crypto', 'BNB', 'Binance Coin', 580.0, 0.018, 'Exchange', '€85B', 'Ecosistema Binance.', { ceo: 'Richard Teng', founded: '2017', employees: '0', dividend: '0.00%' }),
-      'XRP': new MarketAsset('crypto', 'XRP', 'Ripple', 0.60, 0.02, 'Pagamenti', '€30B', 'Banche.', { ceo: 'Brad Garlinghouse', founded: '2012', employees: '0', dividend: '0.00%' }),
-      'ADA': new MarketAsset('crypto', 'ADA', 'Cardano', 0.45, 0.025, 'Smart Contracts', '€15B', 'Peer-reviewed.', { ceo: 'Charles Hoskinson', founded: '2017', employees: '0', dividend: '0.00%' }),
+      // 4. REAL STOCKS (PRO MAX 2) -> Super prolifichi
+      'MRCH': new MarketAsset('promax_stocks', 'MRCH', 'Marchetti', 200.0, 0.06, 'Lusso', '€4.8B', 'Holding italiana di moda e beni di lusso.', { ceo: 'Aura in persona', founded: '1967 (hanno aperto domani)', employees: 'Motivi familiari', dividend: '2.80%' }, false, true),
+      'NVDA': new MarketAsset('promax_stocks', 'NVDA', 'NVIDIA', 950.0, 0.04, 'Hardware', '€2.2T', 'Leader indiscusso microchip AI.', { ceo: 'Jensen Huang', founded: '1993', employees: '26,000', dividend: '0.02%' }, false, true),
 
-      // CRYPTO PRO MAX (Molto prolifiche)
-      'ESTI': new MarketAsset('promax_crypto', 'ESTI', 'EsticazziCoin', 0.05, 0.1, 'Meme', '€40M', 'Disinteresse globale.', { ceo: 'Nessuno', founded: '2024', employees: '0', dividend: '0.00%' }, false, true),
-      'BTC': new MarketAsset('promax_crypto', 'BTC', 'Bitcoin', 65000.0, 0.01, 'Crypto', '€1.2T', 'Oro digitale.', { ceo: 'Satoshi Nakamoto', founded: '2009', employees: '0', dividend: '0.00%' }, false, true),
-      'USDT': new MarketAsset('promax_crypto', 'USDT', 'Tether', 1.0, 0.0001, 'Stablecoin', '€110B', 'Ancorato al dollaro.', { ceo: 'Paolo Ardoino', founded: '2014', employees: '0', dividend: '0.00%' }, false, true),
-      'CALV': new MarketAsset('promax_crypto', 'CALV', 'CalvaniCoin', 4.5, 0.08, 'Esclusiva', '€10M', 'Crypto elitaria.', { ceo: 'Calvani', founded: '2023', employees: '0', dividend: '0.00%' }, false, true),
+      // 5. BASE CRYPTO (Standard 5)
+      'SOL': new MarketAsset('crypto', 'SOL', 'Solana', 140.0, 0.025, 'DeFi', '€65B', 'Rete blockchain super veloce e scalabile.', { ceo: 'Anatoly Yakovenko', founded: '2020', employees: '0', dividend: '0.00%' }),
+      'DOGE': new MarketAsset('crypto', 'DOGE', 'Dogecoin', 0.15, 0.05, 'Meme', '€20B', 'La meme coin originale supportata dalla community.', { ceo: 'Billy Markus', founded: '2013', employees: '0', dividend: '0.00%' }),
+      'BNB': new MarketAsset('crypto', 'BNB', 'Binance Coin', 580.0, 0.018, 'Exchange', '€85B', 'Ecosistema Binance e sconti sulle fee.', { ceo: 'Richard Teng', founded: '2017', employees: '0', dividend: '0.00%' }),
+      'XRP': new MarketAsset('crypto', 'XRP', 'Ripple', 0.60, 0.02, 'Pagamenti', '€30B', 'Transazioni internazionali per le banche.', { ceo: 'Brad Garlinghouse', founded: '2012', employees: '0', dividend: '0.00%' }),
+      'ADA': new MarketAsset('crypto', 'ADA', 'Cardano', 0.45, 0.025, 'Smart Contracts', '€15B', 'Blockchain basata sulla ricerca accademica.', { ceo: 'Charles Hoskinson', founded: '2017', employees: '0', dividend: '0.00%' }),
 
-      // PRO MAX EXTRA
-      'NBLX': new MarketAsset('promax_stocks', 'NBLX', 'Nebula Galactic', 12500.0, 0.08, 'Spazio', '€10T', 'Dominio Interstellare.', { ceo: 'Il Consiglio', founded: '2045', employees: '2M', dividend: '15.00%' }, false, true),
-      'OMEGA': new MarketAsset('promax_crypto', 'OMEGA', 'OmegaCoin', 450000.0, 0.1, 'Quantum', '€50T', 'Cripto Quantistica.', { ceo: 'AI Core', founded: '2050', employees: '0', dividend: '0.00%' }, false, true),
+      // 6. REAL CRYPTO (PRO 3)
+      'USDT': new MarketAsset('crypto', 'USDT', 'Tether', 1.0, 0.0001, 'Stablecoin', '€110B', 'Stablecoin ancorata al valore del dollaro.', { ceo: 'Paolo Ardoino', founded: '2014', employees: '0', dividend: '0.00%' }, true),
+      'AVAX': new MarketAsset('crypto', 'AVAX', 'Avalanche', 35.0, 0.035, 'DeFi', '€13B', 'Piattaforma smart contract ad alta scalabilità.', { ceo: 'Emin Gün Sirer', founded: '2020', employees: '0', dividend: '0.00%' }, true),
+      'LINK': new MarketAsset('crypto', 'LINK', 'Chainlink', 18.0, 0.03, 'Oracoli', '€10B', 'Connette i dati del mondo reale alle blockchain.', { ceo: 'Sergey Nazarov', founded: '2017', employees: '0', dividend: '0.00%' }, true),
 
-      // DARK WEB
-      'FEDE': new MarketAsset('darkweb', 'FEDE', 'Federicocoin', 1.0, 0.0, 'Scam', '???', 'Sembra salire per sempre...', { ceo: 'Anonimo', founded: 'Ieri', employees: '1', dividend: '0.00%' }, false, false, true)
+      // 7. REAL CRYPTO (PRO MAX 2) -> Super prolifichi
+      'ESTI': new MarketAsset('promax_crypto', 'ESTI', 'EsticazziCoin', 0.05, 0.1, 'Meme', '€40M', 'La moneta del disinteresse globale.', { ceo: 'Nessuno', founded: '2024', employees: '0', dividend: '0.00%' }, false, true),
+      'BTC': new MarketAsset('promax_crypto', 'BTC', 'Bitcoin', 65000.0, 0.015, 'Crypto', '€1.2T', 'Oro digitale. Riserva di valore decentralizzata.', { ceo: 'Satoshi Nakamoto', founded: '2009', employees: '0', dividend: '0.00%' }, false, true),
+
+      // 8. DARK WEB
+      'FEDE': new MarketAsset('darkweb', 'FEDE', 'Federicocoin', 1.0, 0.0, 'Scam', '???', 'Sembra salire inarrestabilmente verso l\'infinito...', { ceo: 'Anonimo', founded: 'Ieri', employees: '1', dividend: '0.00%' }, false, false, true)
     };
 
     assetsRef.current = defaultAssets;
@@ -401,18 +405,24 @@ export default function App() {
       const roomKey = `dm-${uname.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
       setState(p => {
         const next = {...p, ui: {...p.ui, activeChatRoom: roomKey}};
-        if(!next.dmRooms.includes(roomKey)) next.dmRooms.push({ id: roomKey, display: uname });
+        if(!next.dmRooms.find(r => r.id === roomKey)) next.dmRooms.push({ id: roomKey, display: uname });
         return next;
       });
     }
   };
 
+  // Rendering del canvas fixato: controlliamo che il contenitore abbia larghezza
   useEffect(() => {
-    if (state.ui.activeTab !== 'markets' && state.ui.activeTab !== 'darkweb' || !chartCanvasRef.current) return;
-    const ctx = chartCanvasRef.current.getContext('2d');
-    const rect = chartCanvasRef.current.parentElement.getBoundingClientRect();
-    chartCanvasRef.current.width = rect.width; chartCanvasRef.current.height = rect.height;
+    if ((state.ui.activeTab !== 'markets' && state.ui.activeTab !== 'darkweb') || !chartCanvasRef.current) return;
+    
+    const canvas = chartCanvasRef.current;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    if(rect.width === 0 || rect.height === 0) return; // FIX per evitare cancellazione canvas se nascosto
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = rect.width; canvas.height = rect.height;
     ctx.clearRect(0, 0, rect.width, rect.height);
+    
     const data = activeAssetObj.history.slice(-state.ui.chartZoom);
     if(data.length === 0) return; 
 
@@ -423,7 +433,7 @@ export default function App() {
     
     ctx.fillStyle = state.ui.activeTab === 'darkweb' ? '#8b5cf6' : '#475569'; 
     ctx.font = '10px monospace';
-    for(let i=0; i<=4; i++) ctx.fillText(formatCurrency(maxP - (finalRange/4)*i, true), rect.width - 55, 20 + (plotH/4)*i + 4);
+    for(let i=0; i<=4; i++) ctx.fillText(formatCurrency(maxP - (finalRange/4)*i, true), rect.width - 65, 20 + (plotH/4)*i + 4);
 
     if (state.ui.chartType === 'candle') {
       const candleWidth = Math.max(2, (plotW / data.length) * 0.7);
@@ -442,7 +452,7 @@ export default function App() {
       });
       ctx.stroke();
     }
-  }, [tick, state.ui.activeTab, state.ui.activeAsset, state.ui.chartType, state.ui.chartZoom]);
+  }, [tick, state.ui.activeTab, state.ui.activeAsset, state.ui.chartType, state.ui.chartZoom, activeAssetObj]);
 
   const handleChartZoom = (e) => {
     e.preventDefault();
@@ -480,10 +490,10 @@ export default function App() {
         const data = await res.json();
         if(data.choices) {
           setState(prev => ({ ...prev, chatHistory: { ...prev.chatHistory, ai: [...prev.chatHistory.ai, { sender: state.user.isProMax ? 'Nebula OMNISCIENT' : 'Nebula AI', text: data.choices[0].message.content, color: state.user.isProMax ? '#a855f7' : '#06b6d4', textCol: '#e2e8f0', time: new Date().toLocaleTimeString().slice(0,5), isBot: true }] } }));
-        } else {
-          showSystemMsg('ai', 'Errore API OpenAI. Controlla la validità della chiave nel pannello Impostazioni.');
+        } else if (data.error) {
+          showSystemMsg('ai', `Errore OpenAI: ${data.error.message}`);
         }
-      } catch(err) { showSystemMsg('ai', 'Errore connessione rete OpenAI.'); }
+      } catch(err) { showSystemMsg('ai', 'Errore critico di connessione ai server OpenAI.'); }
     }
   };
 
@@ -563,7 +573,7 @@ export default function App() {
           <div className="flex items-center space-x-3 border-l border-nebula-border pl-6 cursor-pointer hover:opacity-80" onClick={() => setState(p => ({...p, ui: {...p.ui, activeTab: 'settings'}}))}>
             <div className="text-right">
               <div className="text-sm font-semibold text-white">{state.user.name}</div>
-              <div className={`text-[10px] font-mono font-bold ${state.user.isProMax ? 'text-purple-400' : state.user.isPro ? 'text-amber-500' : 'text-cyan-400'}`}>
+              <div className={`text-[10px] font-mono font-bold ${state.user.isProMax ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 animate-pulse text-transparent bg-clip-text' : state.user.isPro ? 'text-amber-500' : 'text-cyan-400'}`}>
                 {state.user.isProMax ? 'PRO MAX' : state.user.isPro ? 'PRO MEMBER' : 'STANDARD'}
               </div>
             </div>
@@ -607,16 +617,16 @@ export default function App() {
                 <button onClick={() => setState(p => ({...p, ui: {...p.ui, activeMarketType: 'stocks'}}))} className={`flex-1 py-3 text-xs md:text-sm font-semibold border-b-2 ${state.ui.activeMarketType === 'stocks' ? 'text-white border-cyan-500' : 'text-slate-500 border-transparent'}`}>Azioni</button>
                 <button onClick={() => setState(p => ({...p, ui: {...p.ui, activeMarketType: 'crypto'}}))} className={`flex-1 py-3 text-xs md:text-sm font-semibold border-b-2 ${state.ui.activeMarketType === 'crypto' ? 'text-white border-cyan-500' : 'text-slate-500 border-transparent'}`}>Crypto</button>
                 {state.user.isProMax && (
-                  <button onClick={() => setState(p => ({...p, ui: {...p.ui, activeMarketType: 'promax_stocks'}}))} className={`flex-1 py-3 text-[10px] md:text-xs font-black border-b-2 ${state.ui.activeMarketType === 'promax_stocks' ? 'text-purple-400 border-purple-500' : 'text-slate-500 border-transparent'}`}>PRO MAX</button>
+                  <button onClick={() => setState(p => ({...p, ui: {...p.ui, activeMarketType: 'promax_stocks'}}))} className={`flex-1 py-3 text-[10px] md:text-xs font-black border-b-2 ${state.ui.activeMarketType.includes('promax') ? 'text-purple-400 border-purple-500' : 'text-slate-500 border-transparent'}`}>PRO MAX</button>
                 )}
               </div>
               <div className="flex-1 overflow-y-auto custom-scroll p-2 space-y-1">
-                {Object.values(assetsRef.current).filter(a => state.ui.activeMarketType === 'promax_stocks' ? a.type.includes('promax') : a.type === state.ui.activeMarketType).map(asset => (
+                {Object.values(assetsRef.current).filter(a => state.ui.activeMarketType.includes('promax') ? a.type.includes('promax') : a.type === state.ui.activeMarketType).map(asset => (
                   <div key={asset.ticker} onClick={() => setState(p => ({...p, ui: {...p.ui, activeAsset: asset.ticker}}))} className={`cursor-pointer p-3 rounded-lg border flex justify-between items-center transition-colors ${asset.ticker === state.ui.activeAsset ? 'bg-nebula-800/80 border-nebula-700' : 'border-transparent hover:bg-nebula-800/40'}`}>
                     <div>
                       <div className="font-bold text-white text-sm flex items-center space-x-2">
                         <span>{asset.ticker}</span>
-                        {asset.isProMax && <span className="bg-purple-600 text-white text-[8px] px-1 rounded">MAX</span>}
+                        {asset.isProMax && <span className="bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 animate-pulse text-white text-[8px] px-1 rounded font-black tracking-widest shadow-sm">MAX</span>}
                         {asset.isPro && !asset.isProMax && <span className="bg-amber-500 text-white text-[8px] px-1 rounded">PRO</span>}
                       </div>
                       <div className="text-[10px] text-slate-400 truncate max-w-[120px]">{asset.name}</div>
@@ -627,7 +637,7 @@ export default function App() {
               </div>
             </div>
             
-            <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scroll">
+            <div className="flex-1 flex flex-col h-full overflow-y-auto custom-scroll w-full">
               <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-900/40 flex flex-col md:flex-row justify-between md:items-start gap-4">
                 <div className="flex flex-col flex-1">
                   <div className="flex items-center space-x-3 mb-1">
@@ -647,10 +657,10 @@ export default function App() {
                     <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Percent className="w-3 h-3 mr-1"/> Dividendo</span><span className="font-semibold text-slate-200">{activeAssetObj.extra.dividend}</span></div>
                   </div>
                 </div>
-                <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'text-purple-400 drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
+                <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
               </div>
               
-              <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-950/60 relative">
+              <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-950/60 relative w-full h-[350px]">
                 <div className="absolute top-6 right-6 z-10 flex space-x-2 bg-nebula-900/80 p-1 rounded-lg border border-nebula-border items-center backdrop-blur-sm">
                   <span className="text-[10px] text-slate-500 self-center mx-2 hidden sm:flex"><Search className="w-3 h-3 mr-1"/> Zoom</span>
                   <button onClick={() => setState(p => ({...p, ui: {...p.ui, chartZoom: Math.max(15, p.ui.chartZoom - 10)}}))} className="px-2 text-slate-400 hover:text-white font-bold">-</button>
@@ -659,7 +669,7 @@ export default function App() {
                   <button onClick={() => setState(p => ({...p, ui: {...p.ui, chartType: 'candle'}}))} className={`px-3 py-1 rounded text-xs font-bold ${state.ui.chartType === 'candle' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><BarChart2 className="w-4 h-4"/></button>
                   <button onClick={() => setState(p => ({...p, ui: {...p.ui, chartType: 'line'}}))} className={`px-3 py-1 rounded text-xs font-bold ${state.ui.chartType === 'line' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><LineChart className="w-4 h-4"/></button>
                 </div>
-                <div className="relative w-full h-[350px] border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden" onWheel={handleChartZoom}><canvas ref={chartCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair"></canvas></div>
+                <div className="relative w-full h-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden" onWheel={handleChartZoom}><canvas ref={chartCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair"></canvas></div>
               </div>
               
               <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
@@ -699,8 +709,8 @@ export default function App() {
                 </div>
                 <div className="text-left md:text-right shrink-0"><div className="text-3xl font-mono font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]">{formatCurrency(activeAssetObj.currentPrice)}</div></div>
               </div>
-              <div className="p-4 md:p-6 border-b border-purple-900/50 bg-[#020005] relative">
-                <div className="relative w-full h-[400px] border border-purple-900 rounded-xl bg-black overflow-hidden"><canvas ref={chartCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair hue-rotate-90"></canvas></div>
+              <div className="p-4 md:p-6 border-b border-purple-900/50 bg-[#020005] relative h-[400px]">
+                <div className="relative w-full h-full border border-purple-900 rounded-xl bg-black overflow-hidden"><canvas ref={chartCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair hue-rotate-90"></canvas></div>
               </div>
               <div className="p-4 md:p-6 bg-black flex-1">
                 <div className="bg-purple-950/20 p-5 rounded-xl border border-purple-900 max-w-xl mx-auto">
@@ -766,7 +776,7 @@ export default function App() {
               </div>
               <div className="pt-4 pb-1 px-4 flex justify-between items-center text-[10px] font-bold uppercase text-slate-600 border-t border-nebula-border mt-2">
                 <span>Messaggi Privati</span>
-                <button onClick={createPrivateChat} className="hover:text-cyan-400"><Plus className="w-4 h-4" /></button>
+                <button onClick={createPrivateChat} className="hover:text-cyan-400 bg-slate-800 rounded p-1"><Plus className="w-3 h-3" /></button>
               </div>
               <div className="flex-1 p-2 space-y-1 overflow-y-auto custom-scroll">
                 {state.dmRooms.map(room => (
@@ -835,7 +845,7 @@ export default function App() {
               <div className="bg-nebula-900/60 backdrop-blur-md p-8 border border-purple-500/50 rounded-2xl relative flex flex-col shadow-[0_0_40px_rgba(168,85,247,0.15)] overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-transparent pointer-events-none"></div>
                 <div className="absolute top-0 right-0 w-40 h-40 bg-purple-500/20 rounded-full blur-3xl pointer-events-none"></div>
-                <h3 className="text-2xl font-black text-purple-400 mb-2 flex items-center z-10"><Zap className="w-6 h-6 mr-2"/> PRO MAX</h3>
+                <h3 className="text-2xl font-black bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text mb-2 flex items-center z-10"><Zap className="w-6 h-6 mr-2 text-purple-400"/> PRO MAX</h3>
                 <div className="text-4xl font-mono text-white mb-6 font-bold z-10">€15.000<span className="text-sm text-slate-500 font-sans font-normal">/mese</span></div>
                 <ul className="space-y-4 mb-8 flex-1 text-slate-300 z-10">
                   <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Include tutti i vantaggi PRO</li>
@@ -879,9 +889,9 @@ export default function App() {
               <div className="bg-nebula-900/60 p-6 border border-nebula-border rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-nebula-border/50 pb-2">Integrazioni API</h3>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">OpenAI API Key</label>
+                  <label className="block text-xs text-slate-400 mb-1">OpenAI API Key (Custom)</label>
                   <input type="password" value={state.keys.openai} onChange={e => setState(p => ({...p, keys: {...p.keys, openai: e.target.value}}))} placeholder="sk-..." className="w-full bg-nebula-950/80 border border-nebula-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-cyan-500" />
-                  <p className="text-[10px] text-slate-500 mt-2">Richiesto livello PRO. Non condividere la tua chiave.</p>
+                  <p className="text-[10px] text-slate-500 mt-2">La tua chiave per il modello gpt-3.5-turbo. Usata dal chatbot Nebula.</p>
                 </div>
               </div>
             </div>
