@@ -14,8 +14,28 @@ const BACKEND_URL = "https://nebulastock-backend.onrender.com";
 const PRO_KEYS = Array.from({ length: 60 }, (_, i) => `NBL-PRO-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
 PRO_KEYS.splice(0, 10, "NBL-PRO-A1B2-C3D4", "NBL-PRO-X9Y8-Z7W6", "NBL-PRO-Q1W2-E3R4", "NBL-PRO-T5Y6-U7I8", "NBL-PRO-O9P0-A1S2", "NBL-PRO-D3F4-G5H6", "NBL-PRO-J7K8-L9Z0", "NBL-PRO-X1C2-V3B4", "NBL-PRO-N5M6-Q7W8", "NBL-PRO-E9R0-T1Y2");
 
-const PROMAX_KEYS = ["MAX-123", "MAX-ABC"]; // Chiavi per sblocco diretto Pro Max
-
+const PROMAX_KEYS = [
+  "MAX-7K9W2M4P",
+  "MAX-X4B8R9TZ",
+  "MAX-Q3L7N2V9",
+  "MAX-M9P1K6WC",
+  "MAX-H8J4V5XD",
+  "MAX-Y2C9T8NB",
+  "MAX-R7W1L3PQ",
+  "MAX-D5K8M2VX",
+  "MAX-T9N4B7CJ",
+  "MAX-V1L6X9PZ",
+  "MAX-W3P8K2TR",
+  "MAX-K7R9M4VB",
+  "MAX-B2X5N8TJ",
+  "MAX-N9W4P1LD",
+  "MAX-C8J3V7QX",
+  "MAX-L2T9K6PR",
+  "MAX-Z5M8N2WC",
+  "MAX-P4R7X9VJ",
+  "MAX-X1K6B8TL",
+  "MAX-J9W3M7PD"
+];
 let socket;
 
 export default function App() {
