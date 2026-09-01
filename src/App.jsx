@@ -9,7 +9,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND SU RENDER:
-const BACKEND_URL = "INSERISCI_URL_RENDER"; 
+const BACKEND_URL = "https://nebulastock-backend.onrender.com"; 
 
 const OPENAI_KEY = "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";
 
