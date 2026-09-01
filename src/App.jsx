@@ -21,6 +21,7 @@ export default function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [user, setUser] = useState({ id: '', name: 'Guest', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' });
   const [portfolio, setPortfolio] = useState({ cash: 10000, holdings: {} });
+  const [discordModal, setDiscordModal] = useState({ open: false, type: '' });
   
   const [assets, setAssets] = useState({});
   const [gameTime, setGameTime] = useState({ hours: 9, minutes: 0 });
@@ -89,7 +90,6 @@ export default function App() {
         }
       }).catch(() => setIsAuth(true));
     } else {
-      // Se non c'è token ma l'utente ricarica, diamo un profilo guest temporaneo per evitare blocchi
       setIsAuth(true);
       socket.emit('user_login', { id: 'guest_' + Math.floor(Math.random()*1000), name: 'Trader Guest', avatar: '' });
     }
@@ -163,6 +163,14 @@ export default function App() {
       const roomKey = `dm-${uname.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
       setDmRooms(p => p.find(r => r.id === roomKey) ? p : [...p, { id: roomKey, display: uname }]);
       setUi(p => ({ ...p, activeChatRoom: roomKey }));
+    }
+  };
+
+  const executeDiscordTransaction = () => {
+    const amt = parseFloat(document.getElementById('dm-amount')?.value || 0);
+    if(amt > 0) {
+      socket.emit('discord_transaction', { userId: user.id, type: discordModal.type, amount: amt });
+      setDiscordModal({ open: false, type: '' });
     }
   };
 
@@ -375,58 +383,58 @@ export default function App() {
                         <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Building className="w-3 h-3 mr-1"/> Fondazione</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.founded}</span></div>
                         <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Users className="w-3 h-3 mr-1"/> Dipendenti</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.employees}</span></div>
                         <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Percent className="w-3 h-3 mr-1"/> Dividendo</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.dividend}</span></div>
-                      </div>
-                    </div>
-                    <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
-                  </div>
-                  
-                  <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-950/60 relative w-full h-[350px]">
-                    <div className="absolute top-6 right-6 z-10 flex space-x-2 bg-nebula-900/80 p-1 rounded-lg border border-nebula-border items-center backdrop-blur-sm">
-                      <span className="text-[10px] text-slate-500 self-center mx-2 hidden sm:flex"><Search className="w-3 h-3 mr-1"/> Zoom</span>
-                      <button onClick={() => setUi(p => ({...p, chartZoom: Math.max(15, p.chartZoom - 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">+</button>
-                      <button onClick={() => setUi(p => ({...p, chartZoom: Math.min(100, p.chartZoom + 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">-</button>
-                      <div className="w-px h-4 bg-nebula-700 mx-1"></div>
-                      <button onClick={() => setUi(p => ({...p, chartType: 'candle'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'candle' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><BarChart2 className="w-4 h-4"/></button>
-                      <button onClick={() => setUi(p => ({...p, chartType: 'line'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'line' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><LineChart className="w-4 h-4"/></button>
-                    </div>
-                    <div 
-                      className="relative w-full h-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden"
-                      onMouseMove={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                      }}
-                      onMouseLeave={() => setMousePos(null)}
-                    >
-                      <canvas ref={marketCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair"></canvas>
                     </div>
                   </div>
-                  
-                  <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
-                    <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
-                      {(activeAssetObj.type === 'stocks' && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
-                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Azionario Chiuso</span></div>
-                      )}
-                      {(activeAssetObj.type?.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
-                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
-                      )}
-                      <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio?.cash)}</span></div>
-                      <div className="mb-4"><input type="number" value={tradeQty} min="1" onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500" /></div>
-                      <div className="flex justify-between items-center font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50"><span className="text-slate-400">Controvalore:</span><span className="font-bold text-white">{formatCurrency((parseInt(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => executeOrder('BUY')} className="py-3 bg-emerald-600 hover:bg-emerald-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Compra</button>
-                        <button onClick={() => executeOrder('SELL')} className="py-3 bg-rose-600 hover:bg-rose-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Vendi</button>
-                      </div>
-                    </div>
-                    <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border backdrop-blur-sm">
-                      <h3 className="text-sm font-semibold text-white mb-4">La tua Posizione</h3>
-                      <div className="space-y-4 font-mono text-sm">
-                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{portfolio?.holdings?.[activeAssetObj?.ticker]?.shares || 0}</span></div>
-                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{portfolio?.holdings?.[activeAssetObj?.ticker] ? formatCurrency(portfolio.holdings[activeAssetObj.ticker].avgPrice) : '€0.00'}</span></div>
-                        <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${portfolio?.holdings?.[activeAssetObj?.ticker] && (activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{portfolio?.holdings?.[activeAssetObj?.ticker] ? formatCurrency((activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares) : '€0.00'}</span></div>
-                      </div>
+                  <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
+                </div>
+                
+                <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-950/60 relative w-full h-[350px]">
+                  <div className="absolute top-6 right-6 z-10 flex space-x-2 bg-nebula-900/80 p-1 rounded-lg border border-nebula-border items-center backdrop-blur-sm">
+                    <span className="text-[10px] text-slate-500 self-center mx-2 hidden sm:flex"><Search className="w-3 h-3 mr-1"/> Zoom</span>
+                    <button onClick={() => setUi(p => ({...p, chartZoom: Math.max(15, p.chartZoom - 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">+</button>
+                    <button onClick={() => setUi(p => ({...p, chartZoom: Math.min(100, p.chartZoom + 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">-</button>
+                    <div className="w-px h-4 bg-nebula-700 mx-1"></div>
+                    <button onClick={() => setUi(p => ({...p, chartType: 'candle'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'candle' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><BarChart2 className="w-4 h-4"/></button>
+                    <button onClick={() => setUi(p => ({...p, chartType: 'line'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'line' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><LineChart className="w-4 h-4"/></button>
+                  </div>
+                  <div 
+                    className="relative w-full h-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden"
+                    onMouseMove={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                    }}
+                    onMouseLeave={() => setMousePos(null)}
+                  >
+                    <canvas ref={marketCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair"></canvas>
+                  </div>
+                </div>
+                
+                <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
+                  <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
+                    {(activeAssetObj.type === 'stocks' && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
+                      <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Azionario Chiuso</span></div>
+                    )}
+                    {(activeAssetObj.type?.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
+                      <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
+                    )}
+                    <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio?.cash)}</span></div>
+                    <div className="mb-4"><input type="number" value={tradeQty} min="1" onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500" /></div>
+                    <div className="flex justify-between items-center font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50"><span className="text-slate-400">Controvalore:</span><span className="font-bold text-white">{formatCurrency((parseInt(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <button onClick={() => executeOrder('BUY')} className="py-3 bg-emerald-600 hover:bg-emerald-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Compra</button>
+                      <button onClick={() => executeOrder('SELL')} className="py-3 bg-rose-600 hover:bg-rose-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Vendi</button>
                     </div>
                   </div>
-                </>
+                  <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border backdrop-blur-sm">
+                    <h3 className="text-sm font-semibold text-white mb-4">La tua Posizione</h3>
+                    <div className="space-y-4 font-mono text-sm">
+                      <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{portfolio?.holdings?.[activeAssetObj?.ticker]?.shares || 0}</span></div>
+                      <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{portfolio?.holdings?.[activeAssetObj?.ticker] ? formatCurrency(portfolio.holdings[activeAssetObj.ticker].avgPrice) : '€0.00'}</span></div>
+                      <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${portfolio?.holdings?.[activeAssetObj?.ticker] && (activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{portfolio?.holdings?.[activeAssetObj?.ticker] ? formatCurrency((activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares) : '€0.00'}</span></div>
+                    </div>
+                  </div>
+                </div>
+               </>
               )}
             </div>
           </div>
@@ -723,6 +731,6 @@ export default function App() {
           </div>
         ))}
       </div>
-    </div>
+  </div>
   );
 }
