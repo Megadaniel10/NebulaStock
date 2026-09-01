@@ -13,6 +13,9 @@ const BACKEND_URL = "https://nebulastock-backend.onrender.com";
 
 const OPENAI_KEY = "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";
 
+const PRO_KEYS = Array.from({ length: 60 }, (_, i) => `NBL-PRO-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
+PRO_KEYS.splice(0, 10, "NBL-PRO-A1B2-C3D4", "NBL-PRO-X9Y8-Z7W6", "NBL-PRO-Q1W2-E3R4", "NBL-PRO-T5Y6-U7I8", "NBL-PRO-O9P0-A1S2", "NBL-PRO-D3F4-G5H6", "NBL-PRO-J7K8-L9Z0", "NBL-PRO-X1C2-V3B4", "NBL-PRO-N5M6-Q7W8", "NBL-PRO-E9R0-T1Y2");
+
 let socket;
 
 export default function App() {
@@ -30,6 +33,13 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [toasts, setToasts] = useState([]);
   const [resizeTrigger, setResizeTrigger] = useState(0);
+  const [mousePos, setMousePos] = useState(null); // Stato per il cursore sul grafico
+  
+  // Stato per l'IPO Admin
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
+  const [adminCashInput, setAdminCashInput] = useState("");
+  const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
+  const [adminTime, setAdminTime] = useState({ hh: 9, mm: 0 });
   
   const marketCanvasRef = useRef(null);
   const darkCanvasRef = useRef(null);
@@ -155,6 +165,7 @@ export default function App() {
 
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
   
+  // GRAFICO CON TOOLTIP AL PASSAGGIO DEL MOUSE
   useEffect(() => {
     const isDark = ui.activeTab === 'darkweb';
     if (!activeAssetObj || (ui.activeTab !== 'markets' && !isDark)) return;
@@ -183,12 +194,14 @@ export default function App() {
     const plotH = rect.height - 40; 
     const stepX = plotW / Math.max(1, (data.length - 1));
     
+    // Disegna Prezzi asse Y
     ctx.fillStyle = isDark ? '#8b5cf6' : '#475569'; 
     ctx.font = '10px monospace';
     for(let i=0; i<=4; i++) {
       ctx.fillText(formatCurrency(maxP - (finalRange/4)*i, true), rect.width - 65, 20 + (plotH/4)*i + 4);
     }
 
+    // Disegna Linea o Candele
     if (ui.chartType === 'candle') {
       const candleWidth = Math.max(2, (plotW / data.length) * 0.7);
       data.forEach((d, i) => {
@@ -213,7 +226,45 @@ export default function App() {
       });
       ctx.stroke();
     }
-  }, [assets, ui.activeTab, ui.activeAsset, ui.chartType, ui.chartZoom, resizeTrigger, activeAssetObj]);
+
+    // CROSSHAIR E TOOLTIP DEL PREZZO AL MOUSE HOVER
+    if (mousePos && data.length > 0) {
+      let index = Math.round((mousePos.x - 10) / stepX);
+      if (index >= 0 && index < data.length) {
+        const d = data[index];
+        const cx = 10 + (index * stepX);
+        const cy = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
+
+        // Disegna linee tratteggiate (mirino)
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, rect.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(rect.width, cy); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Formatta il riquadro tooltip
+        const priceStr = formatCurrency(d.close);
+        ctx.font = 'bold 11px monospace';
+        const textWidth = ctx.measureText(priceStr).width;
+        
+        let ttX = cx + 15;
+        if (ttX + textWidth + 20 > rect.width) ttX = cx - textWidth - 25; // Sposta a sinistra se esce dallo schermo
+        let ttY = cy - 30;
+        if (ttY < 0) ttY = cy + 15;
+
+        // Sfondo Tooltip
+        ctx.fillStyle = isDark ? '#1a0033' : '#0f172a';
+        ctx.fillRect(ttX, ttY, textWidth + 20, 26);
+        ctx.strokeStyle = isDark ? '#a855f7' : '#38bdf8';
+        ctx.strokeRect(ttX, ttY, textWidth + 20, 26);
+        
+        // Testo Tooltip
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(priceStr, ttX + 10, ttY + 17);
+      }
+    }
+  }, [assets, ui.activeTab, ui.activeAsset, ui.chartType, ui.chartZoom, resizeTrigger, activeAssetObj, mousePos]);
 
   if (!isAuth) {
     return (
@@ -352,14 +403,24 @@ export default function App() {
                   <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-950/60 relative w-full h-[350px]">
                     <div className="absolute top-6 right-6 z-10 flex space-x-2 bg-nebula-900/80 p-1 rounded-lg border border-nebula-border items-center backdrop-blur-sm">
                       <span className="text-[10px] text-slate-500 self-center mx-2 hidden sm:flex"><Search className="w-3 h-3 mr-1"/> Zoom</span>
-                      <button onClick={() => setUi(p => ({...p, chartZoom: Math.max(15, p.chartZoom - 10)}))} className="px-2 text-slate-400 hover:text-white font-bold">-</button>
-                      <button onClick={() => setUi(p => ({...p, chartZoom: Math.min(100, p.chartZoom + 10)}))} className="px-2 text-slate-400 hover:text-white font-bold">+</button>
+                      {/* FIX BOTTONI ZOOM: + diminuisce (zoom in), - aumenta (zoom out) */}
+                      <button onClick={() => setUi(p => ({...p, chartZoom: Math.max(15, p.chartZoom - 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">+</button>
+                      <button onClick={() => setUi(p => ({...p, chartZoom: Math.min(100, p.chartZoom + 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">-</button>
                       <div className="w-px h-4 bg-nebula-700 mx-1"></div>
                       <button onClick={() => setUi(p => ({...p, chartType: 'candle'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'candle' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><BarChart2 className="w-4 h-4"/></button>
                       <button onClick={() => setUi(p => ({...p, chartType: 'line'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'line' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><LineChart className="w-4 h-4"/></button>
                     </div>
-                    {/* CANVAS MARKET */}
-                    <div className="relative w-full h-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden"><canvas ref={marketCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair"></canvas></div>
+                    {/* CANVAS MARKET CON GESTIONE MOUSE */}
+                    <div 
+                      className="relative w-full h-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden"
+                      onMouseMove={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                      }}
+                      onMouseLeave={() => setMousePos(null)}
+                    >
+                      <canvas ref={marketCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair"></canvas>
+                    </div>
                   </div>
                   
                   <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
@@ -515,6 +576,41 @@ export default function App() {
             </div>
           </div>
 
+          {/* TAB SETTINGS (RIPRISTINATA COMPLETA) */}
+          <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'settings' ? 'flex' : 'hidden'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white">Impostazioni</h2>
+              {!user.isDarkWeb && (
+                <button onClick={() => buyTier('DARKWEB', 15000)} className="text-slate-700 hover:text-purple-500 transition-colors" title="???"><Eye className="w-5 h-5"/></button>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
+              <div className="bg-nebula-900/60 p-6 border border-nebula-border rounded-xl backdrop-blur-md">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-nebula-border/50 pb-2">Profilo e Personalizzazione</h3>
+                <label className="block text-xs text-slate-400 mb-1">ID Discord</label>
+                <input type="text" disabled value={user.id} className="w-full bg-nebula-950/50 border border-nebula-border rounded-lg px-3 py-2 text-slate-400 font-mono mb-4 cursor-not-allowed" />
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div><label className="block text-xs text-slate-400 mb-1">Colore Nome</label><input type="color" value={user.colorName} onChange={e => { setUser(p => ({...p, colorName: e.target.value})); socket.emit('user_login', {...user, colorName: e.target.value}) }} className="h-8 w-full rounded bg-transparent border border-nebula-border cursor-pointer" /></div>
+                  <div><label className="block text-xs text-slate-400 mb-1">Colore Testo</label><input type="color" value={user.colorText} onChange={e => { setUser(p => ({...p, colorText: e.target.value})); socket.emit('user_login', {...user, colorText: e.target.value}) }} className="h-8 w-full rounded bg-transparent border border-nebula-border cursor-pointer" /></div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1 flex items-center"><Image className="w-3 h-3 mr-1"/> Sfondo Terminale (URL Immagine)</label>
+                  <input type="url" value={user.bgImage} onChange={e => { setUser(p => ({...p, bgImage: e.target.value})); socket.emit('user_login', {...user, bgImage: e.target.value}) }} placeholder="https://..." className="w-full bg-nebula-950/80 border border-nebula-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500" />
+                </div>
+              </div>
+
+              <div className="bg-nebula-900/60 p-6 border border-nebula-border rounded-xl backdrop-blur-md">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-nebula-border/50 pb-2">Integrazioni API</h3>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">OpenAI API Key (Sistema Centrale)</label>
+                  <input type="password" value={OPENAI_KEY} readOnly className="w-full bg-nebula-950/80 border border-nebula-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none opacity-50 cursor-not-allowed" />
+                  <p className="text-[10px] text-slate-500 mt-2">La chiave API è stata fornita dall'amministratore ed è attiva globalmente.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* TAB DARK WEB */}
           <div className={`h-full flex-col w-full bg-[#030008] ${ui.activeTab === 'darkweb' ? 'flex' : 'hidden'} animate-pulse`} style={{ animationDuration: '4s' }}>
             {activeAssetObj && (
@@ -527,8 +623,17 @@ export default function App() {
                   <div className="text-left md:text-right shrink-0"><div className="text-3xl font-mono font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]">{formatCurrency(activeAssetObj.currentPrice)}</div></div>
                 </div>
                 <div className="p-4 md:p-6 border-b border-purple-900/50 bg-[#020005] relative h-[400px]">
-                  {/* CANVAS DARK WEB */}
-                  <div className="relative w-full h-full border border-purple-900 rounded-xl bg-black overflow-hidden"><canvas ref={darkCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair hue-rotate-90"></canvas></div>
+                  {/* CANVAS DARK WEB CON MOUSE HANDLER */}
+                  <div 
+                    className="relative w-full h-full border border-purple-900 rounded-xl bg-black overflow-hidden"
+                    onMouseMove={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                    }}
+                    onMouseLeave={() => setMousePos(null)}
+                  >
+                    <canvas ref={darkCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair hue-rotate-90"></canvas>
+                  </div>
                 </div>
                 <div className="p-4 md:p-6 bg-black flex-1">
                   <div className="bg-purple-950/20 p-5 rounded-xl border border-purple-900 max-w-xl mx-auto">
@@ -545,7 +650,7 @@ export default function App() {
             )}
           </div>
 
-          {/* TAB ADMIN */}
+          {/* TAB ADMIN (RIPRISTINATO IPO COMPLETO) */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'admin' ? 'flex' : 'hidden'}`}>
             <h2 className="text-2xl font-black text-rose-500 mb-6 flex items-center"><UserCog className="w-6 h-6 mr-3" /> Dev / Admin Panel</h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -553,8 +658,8 @@ export default function App() {
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server</h3>
                 <div className="flex items-center space-x-4">
-                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
                   <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: document.getElementById('adm-hh').value, mm: document.getElementById('adm-mm').value })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza</button></div>
                 </div>
               </div>
@@ -562,13 +667,49 @@ export default function App() {
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Manipolazione Mercato (Live)</h3>
                 <div className="flex items-center space-x-4 mb-4">
-                  <div className="flex-1"><label className="text-xs text-slate-400 block mb-1">Seleziona Asset</label><select id="adm-tkr" className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">{Object.keys(assets).map(k => <option key={k} value={k}>{k}</option>)}</select></div>
+                  <div className="flex-1"><label className="text-xs text-slate-400 block mb-1">Seleziona Asset</label><select id="adm-tkr" className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">{Object.keys(assets || {}).map(k => <option key={k} value={k}>{k}</option>)}</select></div>
                   <div className="flex-1"><label className="text-xs text-slate-400 block mb-1">Nuovo Prezzo Base (€)</label><input type="number" id="adm-prc" className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
                 </div>
                 <button onClick={() => socket.emit('admin_action', { type: 'price', ticker: document.getElementById('adm-tkr').value, price: parseFloat(document.getElementById('adm-prc').value) })} className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-sm">Forza Prezzo Attuale Globale</button>
               </div>
 
-              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md lg:col-span-2">
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl lg:col-span-2 backdrop-blur-md">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option><option value="promax_stocks">Azioni PRO MAX</option><option value="promax_crypto">Crypto PRO MAX</option></select></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Ticker (Es. AAPL)</label><input type="text" maxLength="5" value={newAsset.ticker} onChange={e => setNewAsset({...newAsset, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm uppercase outline-none" /></div>
+                  <div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">Nome Completo</label><input type="text" value={newAsset.name} onChange={e => setNewAsset({...newAsset, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  
+                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo Iniziale (€)</label><input type="number" step="0.1" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Volatilità (Es. 0.02)</label><input type="number" step="0.01" value={newAsset.vol} onChange={e => setNewAsset({...newAsset, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Settore</label><input type="text" value={newAsset.sector} onChange={e => setNewAsset({...newAsset, sector: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Market Cap</label><input type="text" value={newAsset.mcap} onChange={e => setNewAsset({...newAsset, mcap: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  
+                  <div><label className="text-xs text-slate-400 block mb-1">CEO</label><input type="text" value={newAsset.ceo} onChange={e => setNewAsset({...newAsset, ceo: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Fondazione</label><input type="text" value={newAsset.founded} onChange={e => setNewAsset({...newAsset, founded: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Dipendenti</label><input type="text" value={newAsset.employees} onChange={e => setNewAsset({...newAsset, employees: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Dividendo</label><input type="text" value={newAsset.dividend} onChange={e => setNewAsset({...newAsset, dividend: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  
+                  <div className="md:col-span-4 flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
+                    <div className="flex-1"><label className="text-xs text-slate-400 block mb-1">Descrizione Lunga</label><input type="text" value={newAsset.desc} onChange={e => setNewAsset({...newAsset, desc: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                    <div className="flex items-center space-x-2 md:pt-4">
+                      <input type="checkbox" id="isProTick" checked={newAsset.isPro} onChange={e => setNewAsset({...newAsset, isPro: e.target.checked})} className="w-4 h-4 cursor-pointer" />
+                      <label htmlFor="isProTick" className="text-sm font-bold text-amber-500 cursor-pointer">Segna come PRO</label>
+                    </div>
+                    <div className="flex items-center space-x-2 md:pt-4">
+                      <input type="checkbox" id="isProMaxTick" checked={newAsset.isProMax} onChange={e => setNewAsset({...newAsset, isProMax: e.target.checked, isPro: e.target.checked ? true : newAsset.isPro})} className="w-4 h-4 cursor-pointer" />
+                      <label htmlFor="isProMaxTick" className="text-sm font-bold text-purple-400 cursor-pointer">Segna come PRO MAX</label>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => {
+                  if (!newAsset.ticker || !newAsset.name) return showToast("Compila almeno Ticker e Nome.", "error");
+                  socket.emit('admin_action', { type: 'ipo', asset: newAsset });
+                  showToast("Lancio IPO effettuato sul server centrale.", "success");
+                }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
+              </div>
+
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl lg:col-span-2 backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Forza Saldo Utente in Diretta</h3>
                 <div className="bg-nebula-950/80 p-4 rounded-lg border border-nebula-border flex items-center space-x-4">
                   <div className="flex-1"><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" id="adm-uid" defaultValue={user.id} className="w-full bg-nebula-900 border border-nebula-border rounded px-2 py-2 text-white font-mono outline-none" /></div>
