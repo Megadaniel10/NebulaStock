@@ -29,38 +29,35 @@ export default function App() {
   const [tradeQty, setTradeQty] = useState(1);
   const [chatInput, setChatInput] = useState('');
   const [toasts, setToasts] = useState([]);
-  const [resizeTrigger, setResizeTrigger] = useState(0); // Serve per ridisegnare il grafico al resize
+  const [resizeTrigger, setResizeTrigger] = useState(0);
   
-  // FIX: Due riferimenti separati per i due grafici
   const marketCanvasRef = useRef(null);
   const darkCanvasRef = useRef(null);
   const chatScrollRef = useRef(null);
 
-  // Resize Listener per grafici responsivi
   useEffect(() => {
     const handleResize = () => setResizeTrigger(r => r + 1);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Init Socket e Login Discord
   useEffect(() => {
     socket = io(BACKEND_URL);
 
     socket.on('market_init', (data) => {
-      setAssets(data.assets);
-      setGameTime(data.gameTime);
-      setChatHistory(prev => ({ ...prev, global: data.chat.global || [] }));
+      setAssets(data.assets || {});
+      setGameTime(data.gameTime || { hours: 9, minutes: 0 });
+      setChatHistory(prev => ({ ...prev, global: data.chat?.global || [] }));
     });
 
     socket.on('market_update', (data) => {
-      setAssets(data.assets);
-      setGameTime(data.gameTime);
+      setAssets(data.assets || {});
+      setGameTime(data.gameTime || { hours: 9, minutes: 0 });
     });
 
     socket.on('account_update', (acc) => {
       setUser(prev => ({ ...prev, ...acc }));
-      setPortfolio({ cash: acc.cash, holdings: acc.holdings });
+      setPortfolio({ cash: acc.cash || 0, holdings: acc.holdings || {} });
       setIsAuth(true);
     });
 
@@ -101,7 +98,7 @@ export default function App() {
     if(compact && num >= 1e6) return '€' + (num/1e6).toFixed(1) + 'M';
     if(compact && num <= -1e12) return '-€' + (Math.abs(num)/1e12).toFixed(1) + 'T';
     if(compact && num >= 1e3) return '€' + (num/1e3).toFixed(1) + 'K';
-    return '€' + Number(num).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return '€' + Number(num || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   const executeOrder = (type) => {
@@ -112,7 +109,6 @@ export default function App() {
     socket.emit('buy_tier', { userId: user.id, tier, price });
   };
 
-  // ChatBot (OpenAI) e Chat Globale
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -137,7 +133,7 @@ export default function App() {
         const data = await res.json();
         if(data.choices) {
           const aiMsg = { sender: user.isProMax ? 'Nebula OMNISCIENT' : 'Nebula AI', text: data.choices[0].message.content, color: user.isProMax ? '#a855f7' : '#06b6d4', textCol: '#e2e8f0', time: new Date().toLocaleTimeString().slice(0,5), isBot: true };
-          setChatHistory(p => ({ ...p, ai: [...p.ai, aiMsg] }));
+          setChatHistory(p => ({ ...p, ai: [...(p.ai || []), aiMsg] }));
         } else if (data.error) {
           showToast(`Errore OpenAI: ${data.error.message}`, 'error');
         }
@@ -157,26 +153,24 @@ export default function App() {
     }
   };
 
-  // Rendering Grafici (Fix: Selezione del Canvas corretto per evitare larghezza a 0)
-  const activeAssetObj = assets[ui.activeAsset];
+  const activeAssetObj = assets ? assets[ui.activeAsset] : null;
   
   useEffect(() => {
     const isDark = ui.activeTab === 'darkweb';
     if (!activeAssetObj || (ui.activeTab !== 'markets' && !isDark)) return;
     
-    // Seleziona il canvas in base alla scheda attiva
     const canvas = isDark ? darkCanvasRef.current : marketCanvasRef.current;
     if (!canvas) return;
 
     const rect = canvas.parentElement.getBoundingClientRect();
-    if(rect.width === 0 || rect.height === 0) return; // Evita crash se il tab è ancora nascosto
+    if(rect.width === 0 || rect.height === 0) return;
 
     const ctx = canvas.getContext('2d');
     canvas.width = rect.width; 
     canvas.height = rect.height;
     ctx.clearRect(0, 0, rect.width, rect.height);
     
-    const data = activeAssetObj.history.slice(-ui.chartZoom);
+    const data = activeAssetObj.history ? activeAssetObj.history.slice(-ui.chartZoom) : [];
     if(data.length === 0) return; 
 
     let minP = Math.min(...data.map(d => d.low)), maxP = Math.max(...data.map(d => d.high));
@@ -237,7 +231,9 @@ export default function App() {
   }
 
   let totalStockVal = 0;
-  Object.keys(portfolio.holdings).forEach(t => { if(assets[t]) totalStockVal += portfolio.holdings[t].shares * assets[t].currentPrice; });
+  if(portfolio.holdings && assets) {
+    Object.keys(portfolio.holdings).forEach(t => { if(assets[t]) totalStockVal += portfolio.holdings[t].shares * assets[t].currentPrice; });
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col text-sm antialiased text-e2e8f0 font-sans" style={user.bgImage ? { backgroundImage: `url(${user.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { backgroundColor: '#05070e' }}>
@@ -248,18 +244,18 @@ export default function App() {
           <div className="font-black text-white text-lg tracking-wider hidden sm:block">NEBULA</div>
           <div className="h-4 w-px bg-nebula-700 hidden sm:block"></div>
           <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-slate-400">
-            <span className={`w-2 h-2 rounded-full ${(gameTime.hours >= 9 && gameTime.hours < 18) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-            <span>{(gameTime.hours >= 9 && gameTime.hours < 18) ? 'MARKET OPEN' : 'CLOSED'}</span>
+            <span className={`w-2 h-2 rounded-full ${(gameTime?.hours >= 9 && gameTime?.hours < 18) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+            <span>{(gameTime?.hours >= 9 && gameTime?.hours < 18) ? 'MARKET OPEN' : 'CLOSED'}</span>
           </div>
           <div className="h-4 w-px bg-nebula-700 hidden sm:block"></div>
           <div className="hidden sm:flex items-center space-x-2 text-sm font-mono font-bold text-cyan-400">
-            <Clock className="w-4 h-4" /><span>{String(gameTime.hours).padStart(2, '0')}:{String(gameTime.minutes).padStart(2, '0')}</span>
+            <Clock className="w-4 h-4" /><span>{String(gameTime?.hours || 9).padStart(2, '0')}:{String(gameTime?.minutes || 0).padStart(2, '0')}</span>
           </div>
         </div>
         <div className="flex items-center space-x-6">
           <div className="text-right hidden md:block">
             <div className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Patrimonio</div>
-            <div className="font-mono font-bold text-white">{formatCurrency(portfolio.cash + totalStockVal)}</div>
+            <div className="font-mono font-bold text-white">{formatCurrency((portfolio.cash || 0) + totalStockVal)}</div>
           </div>
           <div className="flex items-center space-x-3 border-l border-nebula-border pl-6 cursor-pointer hover:opacity-80" onClick={() => setUi(p => ({...p, activeTab: 'settings'}))}>
             <div className="text-right">
@@ -312,7 +308,7 @@ export default function App() {
                 )}
               </div>
               <div className="flex-1 overflow-y-auto custom-scroll p-2 space-y-1">
-                {Object.values(assets).filter(a => ui.activeMarketType.includes('promax') ? a.type.includes('promax') : a.type === ui.activeMarketType).map(asset => (
+                {Object.values(assets || {}).filter(a => ui.activeMarketType.includes('promax') ? a.type.includes('promax') : a.type === ui.activeMarketType).map(asset => (
                   <div key={asset.ticker} onClick={() => setUi(p => ({...p, activeAsset: asset.ticker}))} className={`cursor-pointer p-3 rounded-lg border flex justify-between items-center transition-colors ${asset.ticker === ui.activeAsset ? 'bg-nebula-800/80 border-nebula-700' : 'border-transparent hover:bg-nebula-800/40'}`}>
                     <div>
                       <div className="font-bold text-white text-sm flex items-center space-x-2">
@@ -344,10 +340,10 @@ export default function App() {
                       <div className="mt-2 text-xs text-slate-400 max-w-xl">{activeAssetObj.desc}</div>
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-xs border-t border-nebula-border/50 pt-4">
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1"/> CEO</span><span className="font-semibold text-slate-200 truncate">{activeAssetObj.extra.ceo}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Building className="w-3 h-3 mr-1"/> Fondazione</span><span className="font-semibold text-slate-200">{activeAssetObj.extra.founded}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Users className="w-3 h-3 mr-1"/> Dipendenti</span><span className="font-semibold text-slate-200">{activeAssetObj.extra.employees}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Percent className="w-3 h-3 mr-1"/> Dividendo</span><span className="font-semibold text-slate-200">{activeAssetObj.extra.dividend}</span></div>
+                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1"/> CEO</span><span className="font-semibold text-slate-200 truncate">{activeAssetObj.extra?.ceo}</span></div>
+                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Building className="w-3 h-3 mr-1"/> Fondazione</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.founded}</span></div>
+                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Users className="w-3 h-3 mr-1"/> Dipendenti</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.employees}</span></div>
+                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Percent className="w-3 h-3 mr-1"/> Dividendo</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.dividend}</span></div>
                       </div>
                     </div>
                     <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
@@ -368,10 +364,10 @@ export default function App() {
                   
                   <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
                     <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
-                      {(activeAssetObj.type === 'stocks' && (gameTime.hours < 9 || gameTime.hours >= 18)) && (
+                      {(activeAssetObj.type === 'stocks' && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Azionario Chiuso</span></div>
                       )}
-                      {(activeAssetObj.type.includes('promax') && (gameTime.hours < 5 || gameTime.hours >= 22)) && (
+                      {(activeAssetObj.type.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
                       )}
                       <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
@@ -385,9 +381,9 @@ export default function App() {
                     <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border backdrop-blur-sm">
                       <h3 className="text-sm font-semibold text-white mb-4">La tua Posizione</h3>
                       <div className="space-y-4 font-mono text-sm">
-                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{actShares}</span></div>
-                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{actShares > 0 ? formatCurrency(actHoldings.avgPrice) : '€0.00'}</span></div>
-                        <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${actShares > 0 && (activeAssetObj.currentPrice - actHoldings.avgPrice) * actShares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{actShares > 0 ? formatCurrency((activeAssetObj.currentPrice - actHoldings.avgPrice) * actShares) : '€0.00'}</span></div>
+                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{portfolio.holdings[activeAssetObj?.ticker]?.shares || 0}</span></div>
+                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{portfolio.holdings[activeAssetObj?.ticker] ? formatCurrency(portfolio.holdings[activeAssetObj.ticker].avgPrice) : '€0.00'}</span></div>
+                        <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${portfolio.holdings[activeAssetObj?.ticker] && (activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{portfolio.holdings[activeAssetObj?.ticker] ? formatCurrency((activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares) : '€0.00'}</span></div>
                       </div>
                     </div>
                   </div>
@@ -405,7 +401,7 @@ export default function App() {
               <table className="w-full text-left font-mono text-xs md:text-sm">
                 <thead><tr className="bg-nebula-900 border-b border-nebula-border text-slate-400 uppercase"><th className="p-4">Asset</th><th className="p-4">Qty</th><th className="p-4">PMD</th><th className="p-4">Attuale</th><th className="p-4">P&L</th><th className="p-4 text-right">Azione</th></tr></thead>
                 <tbody className="divide-y divide-nebula-border/50 text-slate-200">
-                  {Object.keys(portfolio.holdings).map(ticker => {
+                  {Object.keys(portfolio.holdings || {}).map(ticker => {
                     const h = portfolio.holdings[ticker], asset = assets[ticker]; if(!asset) return null;
                     const pnl = (h.shares * asset.currentPrice) - (h.shares * h.avgPrice);
                     return (
@@ -587,14 +583,6 @@ export default function App() {
         </main>
       </div>
 
-      <div className="fixed bottom-5 right-5 z-[70] flex flex-col space-y-3 pointer-events-none w-80">
-        {toasts.map(t => (
-          <div key={t.id} className={`bg-nebula-900/80 p-3 rounded-xl flex items-center space-x-3 border-l-4 ${t.type === 'success' ? 'border-emerald-500' : t.type === 'error' ? 'border-rose-500' : 'border-cyan-500'} shadow-lg backdrop-blur-md`}>
-            {t.type === 'success' ? <Check className="w-4 h-4 text-emerald-400"/> : <X className="w-4 h-4 text-rose-400"/>}
-            <span className="text-white text-xs font-bold leading-tight">{t.msg}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
