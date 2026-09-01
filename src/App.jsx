@@ -8,7 +8,7 @@ import {
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
-// METTI QUI IL LINK DEL TUO BACKEND SU RENDER:
+// URL DEL TUO SERVER RENDER AGGIORNATO
 const BACKEND_URL = "https://nebulastock-backend.onrender.com"; 
 
 const OPENAI_KEY = "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";
@@ -33,9 +33,8 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [toasts, setToasts] = useState([]);
   const [resizeTrigger, setResizeTrigger] = useState(0);
-  const [mousePos, setMousePos] = useState(null); // Stato per il cursore sul grafico
+  const [mousePos, setMousePos] = useState(null); 
   
-  // Stato per l'IPO Admin
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
   const [adminCashInput, setAdminCashInput] = useState("");
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
@@ -165,7 +164,6 @@ export default function App() {
 
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
   
-  // GRAFICO CON TOOLTIP AL PASSAGGIO DEL MOUSE
   useEffect(() => {
     const isDark = ui.activeTab === 'darkweb';
     if (!activeAssetObj || (ui.activeTab !== 'markets' && !isDark)) return;
@@ -194,14 +192,12 @@ export default function App() {
     const plotH = rect.height - 40; 
     const stepX = plotW / Math.max(1, (data.length - 1));
     
-    // Disegna Prezzi asse Y
     ctx.fillStyle = isDark ? '#8b5cf6' : '#475569'; 
     ctx.font = '10px monospace';
     for(let i=0; i<=4; i++) {
       ctx.fillText(formatCurrency(maxP - (finalRange/4)*i, true), rect.width - 65, 20 + (plotH/4)*i + 4);
     }
 
-    // Disegna Linea o Candele
     if (ui.chartType === 'candle') {
       const candleWidth = Math.max(2, (plotW / data.length) * 0.7);
       data.forEach((d, i) => {
@@ -227,7 +223,6 @@ export default function App() {
       ctx.stroke();
     }
 
-    // CROSSHAIR E TOOLTIP DEL PREZZO AL MOUSE HOVER
     if (mousePos && data.length > 0) {
       let index = Math.round((mousePos.x - 10) / stepX);
       if (index >= 0 && index < data.length) {
@@ -235,7 +230,6 @@ export default function App() {
         const cx = 10 + (index * stepX);
         const cy = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
 
-        // Disegna linee tratteggiate (mirino)
         ctx.setLineDash([4, 4]);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.lineWidth = 1;
@@ -243,23 +237,20 @@ export default function App() {
         ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(rect.width, cy); ctx.stroke();
         ctx.setLineDash([]);
 
-        // Formatta il riquadro tooltip
         const priceStr = formatCurrency(d.close);
         ctx.font = 'bold 11px monospace';
         const textWidth = ctx.measureText(priceStr).width;
         
         let ttX = cx + 15;
-        if (ttX + textWidth + 20 > rect.width) ttX = cx - textWidth - 25; // Sposta a sinistra se esce dallo schermo
+        if (ttX + textWidth + 20 > rect.width) ttX = cx - textWidth - 25; 
         let ttY = cy - 30;
         if (ttY < 0) ttY = cy + 15;
 
-        // Sfondo Tooltip
         ctx.fillStyle = isDark ? '#1a0033' : '#0f172a';
         ctx.fillRect(ttX, ttY, textWidth + 20, 26);
         ctx.strokeStyle = isDark ? '#a855f7' : '#38bdf8';
         ctx.strokeRect(ttX, ttY, textWidth + 20, 26);
         
-        // Testo Tooltip
         ctx.fillStyle = '#ffffff';
         ctx.fillText(priceStr, ttX + 10, ttY + 17);
       }
@@ -403,14 +394,12 @@ export default function App() {
                   <div className="p-4 md:p-6 border-b border-nebula-border bg-nebula-950/60 relative w-full h-[350px]">
                     <div className="absolute top-6 right-6 z-10 flex space-x-2 bg-nebula-900/80 p-1 rounded-lg border border-nebula-border items-center backdrop-blur-sm">
                       <span className="text-[10px] text-slate-500 self-center mx-2 hidden sm:flex"><Search className="w-3 h-3 mr-1"/> Zoom</span>
-                      {/* FIX BOTTONI ZOOM: + diminuisce (zoom in), - aumenta (zoom out) */}
                       <button onClick={() => setUi(p => ({...p, chartZoom: Math.max(15, p.chartZoom - 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">+</button>
                       <button onClick={() => setUi(p => ({...p, chartZoom: Math.min(100, p.chartZoom + 10)}))} className="px-2 text-slate-400 hover:text-white font-bold text-lg leading-none">-</button>
                       <div className="w-px h-4 bg-nebula-700 mx-1"></div>
                       <button onClick={() => setUi(p => ({...p, chartType: 'candle'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'candle' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><BarChart2 className="w-4 h-4"/></button>
                       <button onClick={() => setUi(p => ({...p, chartType: 'line'}))} className={`px-3 py-1 rounded text-xs font-bold ${ui.chartType === 'line' ? 'bg-nebula-700 text-white' : 'text-slate-400'}`}><LineChart className="w-4 h-4"/></button>
                     </div>
-                    {/* CANVAS MARKET CON GESTIONE MOUSE */}
                     <div 
                       className="relative w-full h-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden"
                       onMouseMove={(e) => {
@@ -576,7 +565,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB SETTINGS (RIPRISTINATA COMPLETA) */}
+          {/* TAB SETTINGS */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'settings' ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Impostazioni</h2>
@@ -605,7 +594,7 @@ export default function App() {
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">OpenAI API Key (Sistema Centrale)</label>
                   <input type="password" value={OPENAI_KEY} readOnly className="w-full bg-nebula-950/80 border border-nebula-border rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none opacity-50 cursor-not-allowed" />
-                  <p className="text-[10px] text-slate-500 mt-2">La chiave API è stata fornita dall'amministratore ed è attiva globalmente.</p>
+                  <p className="text-[10px] text-slate-500 mt-2">La chiave API è fornita dall'amministratore ed è attiva globalmente.</p>
                 </div>
               </div>
             </div>
@@ -623,7 +612,6 @@ export default function App() {
                   <div className="text-left md:text-right shrink-0"><div className="text-3xl font-mono font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]">{formatCurrency(activeAssetObj.currentPrice)}</div></div>
                 </div>
                 <div className="p-4 md:p-6 border-b border-purple-900/50 bg-[#020005] relative h-[400px]">
-                  {/* CANVAS DARK WEB CON MOUSE HANDLER */}
                   <div 
                     className="relative w-full h-full border border-purple-900 rounded-xl bg-black overflow-hidden"
                     onMouseMove={(e) => {
@@ -650,7 +638,7 @@ export default function App() {
             )}
           </div>
 
-          {/* TAB ADMIN (RIPRISTINATO IPO COMPLETO) */}
+          {/* TAB ADMIN */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'admin' ? 'flex' : 'hidden'}`}>
             <h2 className="text-2xl font-black text-rose-500 mb-6 flex items-center"><UserCog className="w-6 h-6 mr-3" /> Dev / Admin Panel</h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -724,6 +712,28 @@ export default function App() {
         </main>
       </div>
 
+      {discordModal.open && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-nebula-900/90 border border-cyan-500/50 rounded-2xl max-w-sm w-full p-6 relative">
+            <button onClick={() => setDiscordModal({open: false, type: ''})} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+            <div className="text-center mb-6">
+              <Wallet className="w-10 h-10 text-[#5865F2] mx-auto mb-2" />
+              <h3 className="text-xl font-bold text-white">{discordModal.type === 'DEPOSIT' ? 'Deposito' : 'Prelievo'}</h3>
+            </div>
+            <input type="number" id="dm-amount" defaultValue="1000" min="1" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500" />
+            <button onClick={executeDiscordTransaction} className="w-full py-3 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-lg font-bold transition-colors">Conferma Operazione</button>
+          </div>
+        </div>
+      )}
+
+      <div className="fixed bottom-5 right-5 z-[70] flex flex-col space-y-3 pointer-events-none w-80">
+        {toasts.map(t => (
+          <div key={t.id} className={`bg-nebula-900/80 p-3 rounded-xl flex items-center space-x-3 border-l-4 ${t.type === 'success' ? 'border-emerald-500' : t.type === 'error' ? 'border-rose-500' : 'border-cyan-500'} shadow-lg backdrop-blur-md`}>
+            {t.type === 'success' ? <Check className="w-4 h-4 text-emerald-400"/> : <X className="w-4 h-4 text-rose-400"/>}
+            <span className="text-white text-xs font-bold leading-tight">{t.msg}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
