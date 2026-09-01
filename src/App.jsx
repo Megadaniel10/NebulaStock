@@ -8,7 +8,6 @@ import {
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
-// URL DEL TUO SERVER RENDER AGGIORNATO
 const BACKEND_URL = "https://nebulastock-backend.onrender.com"; 
 
 const OPENAI_KEY = "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";
@@ -20,8 +19,8 @@ let socket;
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
-  const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' });
-  const [portfolio, setPortfolio] = useState({ cash: 0, holdings: {} });
+  const [user, setUser] = useState({ id: '', name: 'Guest', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' });
+  const [portfolio, setPortfolio] = useState({ cash: 10000, holdings: {} });
   
   const [assets, setAssets] = useState({});
   const [gameTime, setGameTime] = useState({ hours: 9, minutes: 0 });
@@ -36,9 +35,6 @@ export default function App() {
   const [mousePos, setMousePos] = useState(null); 
   
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
-  const [adminCashInput, setAdminCashInput] = useState("");
-  const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
-  const [adminTime, setAdminTime] = useState({ hh: 9, mm: 0 });
   
   const marketCanvasRef = useRef(null);
   const darkCanvasRef = useRef(null);
@@ -54,24 +50,28 @@ export default function App() {
     socket = io(BACKEND_URL);
 
     socket.on('market_init', (data) => {
-      setAssets(data.assets || {});
-      setGameTime(data.gameTime || { hours: 9, minutes: 0 });
-      setChatHistory(prev => ({ ...prev, global: data.chat?.global || [] }));
+      if (data?.assets) setAssets(data.assets);
+      if (data?.gameTime) setGameTime(data.gameTime);
+      if (data?.chat) setChatHistory(prev => ({ ...prev, global: data.chat.global || [] }));
     });
 
     socket.on('market_update', (data) => {
-      setAssets(data.assets || {});
-      setGameTime(data.gameTime || { hours: 9, minutes: 0 });
+      if (data?.assets) setAssets(data.assets);
+      if (data?.gameTime) setGameTime(data.gameTime);
     });
 
     socket.on('account_update', (acc) => {
-      setUser(prev => ({ ...prev, ...acc }));
-      setPortfolio({ cash: acc.cash || 0, holdings: acc.holdings || {} });
-      setIsAuth(true);
+      if (acc) {
+        setUser(prev => ({ ...prev, ...acc }));
+        setPortfolio({ cash: acc.cash || 0, holdings: acc.holdings || {} });
+        setIsAuth(true);
+      }
     });
 
     socket.on('chat_update', ({ room, chat }) => {
-      setChatHistory(prev => ({ ...prev, [room]: chat }));
+      if (room && chat) {
+        setChatHistory(prev => ({ ...prev, [room]: chat }));
+      }
     });
 
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
@@ -87,7 +87,11 @@ export default function App() {
         if (u.id) {
           socket.emit('user_login', { id: u.id, name: u.username, avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : '' });
         }
-      });
+      }).catch(() => setIsAuth(true));
+    } else {
+      // Se non c'è token ma l'utente ricarica, diamo un profilo guest temporaneo per evitare blocchi
+      setIsAuth(true);
+      socket.emit('user_login', { id: 'guest_' + Math.floor(Math.random()*1000), name: 'Trader Guest', avatar: '' });
     }
 
     return () => socket.disconnect();
@@ -111,7 +115,7 @@ export default function App() {
   };
 
   const executeOrder = (type) => {
-    socket.emit('execute_trade', { userId: user.id, type, ticker: ui.activeAsset, qty: parseInt(tradeQty) });
+    socket.emit('execute_trade', { userId: user.id, type, ticker: ui.activeAsset, qty: parseInt(tradeQty) || 1 });
   };
 
   const buyTier = (tier, price) => {
@@ -122,7 +126,7 @@ export default function App() {
     e.preventDefault();
     if (!chatInput.trim()) return;
     const room = ui.activeChatRoom;
-    const msgObj = { sender: user.name, text: chatInput, color: user.colorName, textCol: user.colorText, time: new Date().toLocaleTimeString().slice(0,5) };
+    const msgObj = { sender: user.name, text: chatInput, color: user.colorName || '#ffffff', textCol: user.colorText || '#cbd5e1', time: new Date().toLocaleTimeString().slice(0,5) };
     
     if (room === 'ai') {
       if(!user.isPro && !user.isProMax) return showToast('Devi essere PRO o PRO MAX per Nebula AI.', 'error');
@@ -140,10 +144,10 @@ export default function App() {
           body: JSON.stringify({ model: "gpt-3.5-turbo", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: msgObj.text }] })
         });
         const data = await res.json();
-        if(data.choices) {
+        if(data?.choices) {
           const aiMsg = { sender: user.isProMax ? 'Nebula OMNISCIENT' : 'Nebula AI', text: data.choices[0].message.content, color: user.isProMax ? '#a855f7' : '#06b6d4', textCol: '#e2e8f0', time: new Date().toLocaleTimeString().slice(0,5), isBot: true };
           setChatHistory(p => ({ ...p, ai: [...(p.ai || []), aiMsg] }));
-        } else if (data.error) {
+        } else if (data?.error) {
           showToast(`Errore OpenAI: ${data.error.message}`, 'error');
         }
       } catch(err) { showToast('Errore di rete OpenAI.', 'error'); }
@@ -182,7 +186,7 @@ export default function App() {
     const data = activeAssetObj.history ? activeAssetObj.history.slice(-ui.chartZoom) : [];
     if(data.length === 0) return; 
 
-    let minP = Math.min(...data.map(d => d.low)), maxP = Math.max(...data.map(d => d.high));
+    let minP = Math.min(...data.map(d => d.low || 0)), maxP = Math.max(...data.map(d => d.high || 1));
     const range = (maxP - minP) || 1; 
     minP -= range * 0.1; 
     maxP += range * 0.1;
@@ -257,29 +261,14 @@ export default function App() {
     }
   }, [assets, ui.activeTab, ui.activeAsset, ui.chartType, ui.chartZoom, resizeTrigger, activeAssetObj, mousePos]);
 
-  if (!isAuth) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-nebula-950">
-        <div className="bg-nebula-900/70 border border-nebula-border backdrop-blur-md p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center">
-          <MessageCircle className="w-16 h-16 text-cyan-500 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-white tracking-tight">Nebula Terminal</h1>
-          <p className="text-slate-400 mt-2 text-sm mb-6">Autenticazione Server (Multiplayer)</p>
-          <button onClick={() => window.location.href = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=identify`} className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium py-3 px-4 rounded-xl transition-all shadow-lg">
-            <MessageCircle className="w-5 h-5" /><span>Accedi con Discord</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   let totalStockVal = 0;
-  if(portfolio.holdings && assets) {
+  if(portfolio?.holdings && assets) {
     Object.keys(portfolio.holdings).forEach(t => { if(assets[t]) totalStockVal += portfolio.holdings[t].shares * assets[t].currentPrice; });
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col text-sm antialiased text-e2e8f0 font-sans" style={user.bgImage ? { backgroundImage: `url(${user.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { backgroundColor: '#05070e' }}>
-      <div className={`absolute inset-0 z-0 pointer-events-none ${user.bgImage ? 'bg-nebula-950/85 backdrop-blur-sm' : ''}`}></div>
+    <div className="h-screen w-screen flex flex-col text-sm antialiased text-e2e8f0 font-sans" style={user?.bgImage ? { backgroundImage: `url(${user.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { backgroundColor: '#05070e' }}>
+      <div className={`absolute inset-0 z-0 pointer-events-none ${user?.bgImage ? 'bg-nebula-950/85 backdrop-blur-sm' : ''}`}></div>
       
       <header className="h-14 bg-nebula-900/95 border-b border-nebula-border flex items-center justify-between px-4 shrink-0 z-20 backdrop-blur-md">
         <div className="flex items-center space-x-4">
@@ -297,16 +286,16 @@ export default function App() {
         <div className="flex items-center space-x-6">
           <div className="text-right hidden md:block">
             <div className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Patrimonio</div>
-            <div className="font-mono font-bold text-white">{formatCurrency((portfolio.cash || 0) + totalStockVal)}</div>
+            <div className="font-mono font-bold text-white">{formatCurrency((portfolio?.cash || 0) + totalStockVal)}</div>
           </div>
           <div className="flex items-center space-x-3 border-l border-nebula-border pl-6 cursor-pointer hover:opacity-80" onClick={() => setUi(p => ({...p, activeTab: 'settings'}))}>
             <div className="text-right">
-              <div className="text-sm font-semibold text-white">{user.name}</div>
-              <div className={`text-[10px] font-mono font-bold ${user.isProMax ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 animate-pulse text-transparent bg-clip-text' : user.isPro ? 'text-amber-500' : 'text-cyan-400'}`}>
-                {user.isProMax ? 'PRO MAX' : user.isPro ? 'PRO MEMBER' : 'STANDARD'}
+              <div className="text-sm font-semibold text-white">{user?.name || 'Trader'}</div>
+              <div className={`text-[10px] font-mono font-bold ${user?.isProMax ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 animate-pulse text-transparent bg-clip-text' : user?.isPro ? 'text-amber-500' : 'text-cyan-400'}`}>
+                {user?.isProMax ? 'PRO MAX' : user?.isPro ? 'PRO MEMBER' : 'STANDARD'}
               </div>
             </div>
-            <img src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} className="w-8 h-8 rounded-full border border-nebula-border bg-nebula-800" alt="Avatar" />
+            <img src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}`} className="w-8 h-8 rounded-full border border-nebula-border bg-nebula-800" alt="Avatar" />
           </div>
         </div>
       </header>
@@ -325,7 +314,7 @@ export default function App() {
                 <nav.icon className={`w-5 h-5 text-center ${nav.id === 'premium' ? 'text-amber-500' : ''}`} /><span className="hidden md:block font-medium text-sm">{nav.label}</span>
               </button>
             ))}
-            {user.isDarkWeb && (
+            {user?.isDarkWeb && (
               <button onClick={() => setUi(p => ({...p, activeTab: 'darkweb', activeAsset: 'FEDE'}))} className={`w-full flex items-center space-x-3 px-4 md:px-6 py-3 border-r-2 transition-colors ${ui.activeTab === 'darkweb' ? 'text-white bg-purple-900/40 border-purple-500' : 'text-purple-400 hover:text-white hover:bg-purple-900/20 border-transparent'}`}>
                 <Skull className="w-5 h-5 text-center" /><span className="hidden md:block font-medium text-sm">Dark Web</span>
               </button>
@@ -345,12 +334,12 @@ export default function App() {
               <div className="flex border-b border-nebula-border bg-nebula-900/80">
                 <button onClick={() => setUi(p => ({...p, activeMarketType: 'stocks'}))} className={`flex-1 py-3 text-xs md:text-sm font-semibold border-b-2 ${ui.activeMarketType === 'stocks' ? 'text-white border-cyan-500' : 'text-slate-500 border-transparent'}`}>Azioni</button>
                 <button onClick={() => setUi(p => ({...p, activeMarketType: 'crypto'}))} className={`flex-1 py-3 text-xs md:text-sm font-semibold border-b-2 ${ui.activeMarketType === 'crypto' ? 'text-white border-cyan-500' : 'text-slate-500 border-transparent'}`}>Crypto</button>
-                {user.isProMax && (
+                {user?.isProMax && (
                   <button onClick={() => setUi(p => ({...p, activeMarketType: 'promax_stocks'}))} className={`flex-1 py-3 text-[10px] md:text-xs font-black border-b-2 ${ui.activeMarketType.includes('promax') ? 'text-purple-400 border-purple-500' : 'text-slate-500 border-transparent'}`}>PRO MAX</button>
                 )}
               </div>
               <div className="flex-1 overflow-y-auto custom-scroll p-2 space-y-1">
-                {Object.values(assets || {}).filter(a => ui.activeMarketType.includes('promax') ? a.type.includes('promax') : a.type === ui.activeMarketType).map(asset => (
+                {Object.values(assets || {}).filter(a => ui.activeMarketType.includes('promax') ? a.type?.includes('promax') : a.type === ui.activeMarketType).map(asset => (
                   <div key={asset.ticker} onClick={() => setUi(p => ({...p, activeAsset: asset.ticker}))} className={`cursor-pointer p-3 rounded-lg border flex justify-between items-center transition-colors ${asset.ticker === ui.activeAsset ? 'bg-nebula-800/80 border-nebula-700' : 'border-transparent hover:bg-nebula-800/40'}`}>
                     <div>
                       <div className="font-bold text-white text-sm flex items-center space-x-2">
@@ -417,10 +406,10 @@ export default function App() {
                       {(activeAssetObj.type === 'stocks' && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Azionario Chiuso</span></div>
                       )}
-                      {(activeAssetObj.type.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
+                      {(activeAssetObj.type?.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
                       )}
-                      <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
+                      <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio?.cash)}</span></div>
                       <div className="mb-4"><input type="number" value={tradeQty} min="1" onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500" /></div>
                       <div className="flex justify-between items-center font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50"><span className="text-slate-400">Controvalore:</span><span className="font-bold text-white">{formatCurrency((parseInt(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
                       <div className="grid grid-cols-2 gap-4">
@@ -431,9 +420,9 @@ export default function App() {
                     <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border backdrop-blur-sm">
                       <h3 className="text-sm font-semibold text-white mb-4">La tua Posizione</h3>
                       <div className="space-y-4 font-mono text-sm">
-                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{portfolio.holdings[activeAssetObj?.ticker]?.shares || 0}</span></div>
-                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{portfolio.holdings[activeAssetObj?.ticker] ? formatCurrency(portfolio.holdings[activeAssetObj.ticker].avgPrice) : '€0.00'}</span></div>
-                        <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${portfolio.holdings[activeAssetObj?.ticker] && (activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{portfolio.holdings[activeAssetObj?.ticker] ? formatCurrency((activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares) : '€0.00'}</span></div>
+                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{portfolio?.holdings?.[activeAssetObj?.ticker]?.shares || 0}</span></div>
+                        <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{portfolio?.holdings?.[activeAssetObj?.ticker] ? formatCurrency(portfolio.holdings[activeAssetObj.ticker].avgPrice) : '€0.00'}</span></div>
+                        <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${portfolio?.holdings?.[activeAssetObj?.ticker] && (activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{portfolio?.holdings?.[activeAssetObj?.ticker] ? formatCurrency((activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares) : '€0.00'}</span></div>
                       </div>
                     </div>
                   </div>
@@ -451,7 +440,7 @@ export default function App() {
               <table className="w-full text-left font-mono text-xs md:text-sm">
                 <thead><tr className="bg-nebula-900 border-b border-nebula-border text-slate-400 uppercase"><th className="p-4">Asset</th><th className="p-4">Qty</th><th className="p-4">PMD</th><th className="p-4">Attuale</th><th className="p-4">P&L</th><th className="p-4 text-right">Azione</th></tr></thead>
                 <tbody className="divide-y divide-nebula-border/50 text-slate-200">
-                  {Object.keys(portfolio.holdings || {}).map(ticker => {
+                  {Object.keys(portfolio?.holdings || {}).map(ticker => {
                     const h = portfolio.holdings[ticker], asset = assets[ticker]; if(!asset) return null;
                     const pnl = (h.shares * asset.currentPrice) - (h.shares * h.avgPrice);
                     return (
@@ -475,7 +464,7 @@ export default function App() {
               <div className="p-4 border-b border-nebula-border text-xs font-bold uppercase text-slate-500">Canali</div>
               <div className="p-2 space-y-1">
                 <button onClick={() => setUi(p => ({...p, activeChatRoom: 'global'}))} className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors ${ui.activeChatRoom === 'global' ? 'bg-nebula-800 text-white' : 'text-slate-400 hover:bg-nebula-800/50'}`}><Globe className="w-4 h-4" /><span>Global Room</span></button>
-                <button onClick={() => setUi(p => ({...p, activeChatRoom: 'ai'}))} className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors ${ui.activeChatRoom === 'ai' ? 'bg-nebula-800 text-white' : 'text-slate-400 hover:bg-nebula-800/50'}`}><Bot className={`w-4 h-4 ${user.isProMax ? 'text-purple-400' : 'text-cyan-400'}`} /><span>{user.isProMax ? 'Nebula OMNISCIENT' : 'Nebula AI'}</span>{(!user.isPro && !user.isProMax) && <Lock className="w-3 h-3 ml-1" />}</button>
+                <button onClick={() => setUi(p => ({...p, activeChatRoom: 'ai'}))} className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors ${ui.activeChatRoom === 'ai' ? 'bg-nebula-800 text-white' : 'text-slate-400 hover:bg-nebula-800/50'}`}><Bot className={`w-4 h-4 ${user?.isProMax ? 'text-purple-400' : 'text-cyan-400'}`} /><span>{user?.isProMax ? 'Nebula OMNISCIENT' : 'Nebula AI'}</span>{(!user?.isPro && !user?.isProMax) && <Lock className="w-3 h-3 ml-1" />}</button>
               </div>
               <div className="pt-4 pb-1 px-4 flex justify-between items-center text-[10px] font-bold uppercase text-slate-600 border-t border-nebula-border mt-2">
                 <span>Messaggi Privati</span>
@@ -526,7 +515,7 @@ export default function App() {
                   <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Accesso Chatbot Nebula AI (Analista)</li>
                   <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Accesso alle Azioni e Crypto PRO</li>
                 </ul>
-                {!user.isPro ? (
+                {!user?.isPro ? (
                   <button onClick={() => buyTier('PRO', 7500)} className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-500 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-opacity text-lg">Acquista Ora</button>
                 ) : (
                   <button disabled className="w-full py-4 bg-amber-900/50 text-amber-500 font-bold rounded-xl cursor-not-allowed">Attivo</button>
@@ -556,7 +545,7 @@ export default function App() {
                   <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Sblocco Mercato PRO MAX (05:00 - 22:00)</li>
                   <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Asset Esclusivi ad altissimo rendimento</li>
                 </ul>
-                {!user.isProMax ? (
+                {!user?.isProMax ? (
                   <button onClick={() => buyTier('PROMAX', 15000)} className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(147,51,234,0.5)] hover:opacity-90 transition-opacity text-lg z-10">Ascendi a MAX</button>
                 ) : (
                   <button disabled className="w-full py-4 bg-purple-900/50 text-purple-400 font-bold rounded-xl cursor-not-allowed z-10 border border-purple-500/30">Livello Massimo Raggiunto</button>
@@ -569,7 +558,7 @@ export default function App() {
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'settings' ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Impostazioni</h2>
-              {!user.isDarkWeb && (
+              {!user?.isDarkWeb && (
                 <button onClick={() => buyTier('DARKWEB', 15000)} className="text-slate-700 hover:text-purple-500 transition-colors" title="???"><Eye className="w-5 h-5"/></button>
               )}
             </div>
@@ -578,14 +567,14 @@ export default function App() {
               <div className="bg-nebula-900/60 p-6 border border-nebula-border rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-nebula-border/50 pb-2">Profilo e Personalizzazione</h3>
                 <label className="block text-xs text-slate-400 mb-1">ID Discord</label>
-                <input type="text" disabled value={user.id} className="w-full bg-nebula-950/50 border border-nebula-border rounded-lg px-3 py-2 text-slate-400 font-mono mb-4 cursor-not-allowed" />
+                <input type="text" disabled value={user?.id || ''} className="w-full bg-nebula-950/50 border border-nebula-border rounded-lg px-3 py-2 text-slate-400 font-mono mb-4 cursor-not-allowed" />
                 <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div><label className="block text-xs text-slate-400 mb-1">Colore Nome</label><input type="color" value={user.colorName} onChange={e => { setUser(p => ({...p, colorName: e.target.value})); socket.emit('user_login', {...user, colorName: e.target.value}) }} className="h-8 w-full rounded bg-transparent border border-nebula-border cursor-pointer" /></div>
-                  <div><label className="block text-xs text-slate-400 mb-1">Colore Testo</label><input type="color" value={user.colorText} onChange={e => { setUser(p => ({...p, colorText: e.target.value})); socket.emit('user_login', {...user, colorText: e.target.value}) }} className="h-8 w-full rounded bg-transparent border border-nebula-border cursor-pointer" /></div>
+                  <div><label className="block text-xs text-slate-400 mb-1">Colore Nome</label><input type="color" value={user?.colorName || '#ffffff'} onChange={e => { setUser(p => ({...p, colorName: e.target.value})); socket.emit('user_login', {...user, colorName: e.target.value}) }} className="h-8 w-full rounded bg-transparent border border-nebula-border cursor-pointer" /></div>
+                  <div><label className="block text-xs text-slate-400 mb-1">Colore Testo</label><input type="color" value={user?.colorText || '#cbd5e1'} onChange={e => { setUser(p => ({...p, colorText: e.target.value})); socket.emit('user_login', {...user, colorText: e.target.value}) }} className="h-8 w-full rounded bg-transparent border border-nebula-border cursor-pointer" /></div>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-400 mb-1 flex items-center"><Image className="w-3 h-3 mr-1"/> Sfondo Terminale (URL Immagine)</label>
-                  <input type="url" value={user.bgImage} onChange={e => { setUser(p => ({...p, bgImage: e.target.value})); socket.emit('user_login', {...user, bgImage: e.target.value}) }} placeholder="https://..." className="w-full bg-nebula-950/80 border border-nebula-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500" />
+                  <input type="url" value={user?.bgImage || ''} onChange={e => { setUser(p => ({...p, bgImage: e.target.value})); socket.emit('user_login', {...user, bgImage: e.target.value}) }} placeholder="https://..." className="w-full bg-nebula-950/80 border border-nebula-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500" />
                 </div>
               </div>
 
@@ -700,8 +689,8 @@ export default function App() {
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl lg:col-span-2 backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Forza Saldo Utente in Diretta</h3>
                 <div className="bg-nebula-950/80 p-4 rounded-lg border border-nebula-border flex items-center space-x-4">
-                  <div className="flex-1"><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" id="adm-uid" defaultValue={user.id} className="w-full bg-nebula-900 border border-nebula-border rounded px-2 py-2 text-white font-mono outline-none" /></div>
-                  <div className="flex-1"><label className="text-xs text-slate-400">Nuovo Saldo (€)</label><input type="number" id="adm-cash" defaultValue={portfolio.cash} className="w-full bg-nebula-900 border border-nebula-border rounded px-2 py-2 text-white font-mono outline-none" /></div>
+                  <div className="flex-1"><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" id="adm-uid" defaultValue={user?.id || ''} className="w-full bg-nebula-900 border border-nebula-border rounded px-2 py-2 text-white font-mono outline-none" /></div>
+                  <div className="flex-1"><label className="text-xs text-slate-400">Nuovo Saldo (€)</label><input type="number" id="adm-cash" defaultValue={portfolio?.cash || 0} className="w-full bg-nebula-900 border border-nebula-border rounded px-2 py-2 text-white font-mono outline-none" /></div>
                   <div className="flex items-end pt-5"><button onClick={() => socket.emit('admin_action', { type: 'cash', userId: document.getElementById('adm-uid').value, cash: parseFloat(document.getElementById('adm-cash').value) })} className="py-2 px-6 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded">Applica Saldo</button></div>
                 </div>
               </div>
