@@ -3,7 +3,7 @@ import {
   BarChart2, Wallet, MessageCircle, Settings, Lock, UserCog, 
   Crown, Factory, Coins, Globe, Plus, Send, X, Check, 
   LineChart, Store, Clock, Users, Building, Percent, Search,
-  Eye, LogOut, Image, Zap, Skull, Trash2, RefreshCw, Key
+  LogOut, Image, Zap, Trash2, RefreshCw, Key, Download, Upload
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -15,8 +15,8 @@ let socket;
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
-  const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' });
-  const [portfolio, setPortfolio] = useState({ cash: 100, holdings: {} });
+  const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, bgImage: '' });
+  const [portfolio, setPortfolio] = useState({ cash: 100, holdings: {} }); // Nuovi utenti partono a 100
   
   const [assets, setAssets] = useState({});
   const [gameTime, setGameTime] = useState({ hours: 9, minutes: 0 });
@@ -37,12 +37,10 @@ export default function App() {
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
   const [adminCodeInput, setAdminCodeInput] = useState("");
-  
   const [adminUserQuery, setAdminUserQuery] = useState("");
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   
   const marketCanvasRef = useRef(null);
-  const darkCanvasRef = useRef(null);
   const chatScrollRef = useRef(null);
 
   useEffect(() => {
@@ -98,6 +96,18 @@ export default function App() {
         setAdminFetchedUser(null);
         showToast("Nessun utente trovato con questo ID", "error");
       }
+    });
+
+    // RICEZIONE BACKUP DAL SERVER
+    socket.on('admin_db_data', (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nebula_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Backup scaricato con successo!", "success");
     });
 
     socket.on('chat_update', ({ room, chat }) => {
@@ -157,9 +167,8 @@ export default function App() {
   const sendMessage = (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    const room = ui.activeChatRoom;
     const msgObj = { sender: user.name, avatar: user.avatar, text: chatInput, color: user.colorName, textCol: user.colorText, time: new Date().toLocaleTimeString().slice(0,5) };
-    socket.emit('send_message', { room, msg: msgObj });
+    socket.emit('send_message', { room: ui.activeChatRoom, msg: msgObj });
     setChatInput('');
   };
 
@@ -192,13 +201,29 @@ export default function App() {
     }
   };
 
+  // Funzione per caricare il backup nel backend
+  const handleRestoreDb = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const json = JSON.parse(evt.target.result);
+        socket.emit('admin_restore_db', json);
+      } catch(err) {
+        showToast("File JSON non valido", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Resetta l'input
+  };
+
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
+  const isMarketOpen = (gameTime?.hours >= 8 && gameTime?.hours < 19) || (gameTime?.hours === 19 && gameTime?.minutes < 30);
   
   useEffect(() => {
-    const isDark = ui.activeTab === 'darkweb';
-    if (!activeAssetObj || (ui.activeTab !== 'markets' && !isDark)) return;
-    
-    const canvas = isDark ? darkCanvasRef.current : marketCanvasRef.current;
+    if (!activeAssetObj || ui.activeTab !== 'markets') return;
+    const canvas = marketCanvasRef.current;
     if (!canvas) return;
 
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -220,7 +245,7 @@ export default function App() {
     const plotH = rect.height - 40; 
     const stepX = plotW / Math.max(1, (data.length - 1));
     
-    ctx.fillStyle = isDark ? '#8b5cf6' : '#475569'; 
+    ctx.fillStyle = '#475569'; 
     ctx.font = '10px monospace';
     for(let i=0; i<=4; i++) ctx.fillText(formatCurrency(maxP - (finalRange/4)*i, true), rect.width - 65, 20 + (plotH/4)*i + 4);
 
@@ -238,7 +263,7 @@ export default function App() {
         ctx.fillRect(x - candleWidth/2, Math.min(yO, yC), candleWidth, Math.max(1, Math.abs(yO - yC)));
       });
     } else {
-      ctx.beginPath(); ctx.strokeStyle = isDark ? '#a855f7' : '#06b6d4'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2;
       data.forEach((d, i) => {
         const x = 10 + (i * stepX);
         const yC = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
@@ -263,8 +288,8 @@ export default function App() {
         let ttX = cx + 15; if (ttX + textWidth + 20 > rect.width) ttX = cx - textWidth - 25; 
         let ttY = cy - 30; if (ttY < 0) ttY = cy + 15;
 
-        ctx.fillStyle = isDark ? '#1a0033' : '#0f172a'; ctx.fillRect(ttX, ttY, textWidth + 20, 26);
-        ctx.strokeStyle = isDark ? '#a855f7' : '#38bdf8'; ctx.strokeRect(ttX, ttY, textWidth + 20, 26);
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(ttX, ttY, textWidth + 20, 26);
+        ctx.strokeStyle = '#38bdf8'; ctx.strokeRect(ttX, ttY, textWidth + 20, 26);
         ctx.fillStyle = '#ffffff'; ctx.fillText(priceStr, ttX + 10, ttY + 17);
       }
     }
@@ -299,8 +324,8 @@ export default function App() {
           <div className="font-black text-white text-lg tracking-wider hidden sm:block">NEBULA</div>
           <div className="h-4 w-px bg-nebula-700 hidden sm:block"></div>
           <div className="hidden sm:flex items-center space-x-2 text-xs font-mono text-slate-400">
-            <span className={`w-2 h-2 rounded-full ${(gameTime?.hours >= 9 && gameTime?.hours < 18) ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-            <span>{(gameTime?.hours >= 9 && gameTime?.hours < 18) ? 'MARKET OPEN' : 'CLOSED'}</span>
+            <span className={`w-2 h-2 rounded-full ${isMarketOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+            <span>{isMarketOpen ? 'MARKET OPEN' : 'CLOSED'}</span>
           </div>
           <div className="h-4 w-px bg-nebula-700 hidden sm:block"></div>
           <div className="hidden sm:flex items-center space-x-2 text-sm font-mono font-bold text-cyan-400">
@@ -338,16 +363,9 @@ export default function App() {
                 <nav.icon className={`w-5 h-5 text-center ${nav.id === 'premium' ? 'text-amber-500' : ''}`} /><span className="hidden md:block font-medium text-sm">{nav.label}</span>
               </button>
             ))}
-            {user.isDarkWeb && (
-              <button onClick={() => setUi(p => ({...p, activeTab: 'darkweb', activeAsset: 'FEDE'}))} className={`w-full flex items-center space-x-3 px-4 md:px-6 py-3 border-r-2 transition-colors ${ui.activeTab === 'darkweb' ? 'text-white bg-purple-900/40 border-purple-500' : 'text-purple-400 hover:text-white hover:bg-purple-900/20 border-transparent'}`}>
-                <Skull className="w-5 h-5 text-center" /><span className="hidden md:block font-medium text-sm">Dark Web</span>
-              </button>
-            )}
           </div>
           <div className="p-4 flex flex-col space-y-4 justify-center md:justify-start items-center md:items-start">
             <button onClick={() => { localStorage.removeItem('nebulaState'); window.location.hash=''; window.location.reload(); }} className="text-slate-500 hover:text-rose-400 flex items-center space-x-2"><LogOut className="w-4 h-4"/><span className="hidden md:block text-xs">Disconnetti</span></button>
-            
-            {/* TASTO ADMIN CON PROTEZIONE SERVER-SIDE */}
             <button onClick={tryAdminLogin} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-slate-500'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
           </div>
         </nav>
@@ -429,11 +447,11 @@ export default function App() {
                   
                   <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
                     <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
-                      {(!activeAssetObj.type.includes('promax') && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
-                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Chiuso</span></div>
+                      {(!activeAssetObj.type.includes('promax') && !isMarketOpen) && (
+                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura: 08:00 - 19:30</span></div>
                       )}
                       {(activeAssetObj.type.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
-                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
+                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura: 05:00 - 22:00</span></div>
                       )}
                       <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
                       <div className="mb-4"><input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500" /></div>
@@ -554,11 +572,7 @@ export default function App() {
                   <p className="text-xs text-slate-500 mb-2">Oppure usa un codice licenza PRO:</p>
                   <div className="flex space-x-2">
                     <input type="text" id="pro-key-input" placeholder="NBL-PRO-XXXX" className="flex-1 bg-nebula-950 border border-amber-500/50 rounded-lg px-4 py-2 text-white font-mono uppercase focus:outline-none focus:border-amber-400" />
-                    {/* CHIAMATA AL BACKEND PER LA VERIFICA CHIAVE */}
-                    <button onClick={() => {
-                      const val = document.getElementById('pro-key-input').value.trim().toUpperCase();
-                      socket.emit('redeem_key', { userId: user.id, key: val });
-                    }} className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-500">Riscatta</button>
+                    <button onClick={() => socket.emit('redeem_key', { userId: user.id, key: document.getElementById('pro-key-input').value.trim().toUpperCase() })} className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-500">Riscatta</button>
                   </div>
                 </div>
               </div>
@@ -584,11 +598,7 @@ export default function App() {
                   <p className="text-xs text-slate-500 mb-2">Codice licenza PRO MAX:</p>
                   <div className="flex space-x-2">
                     <input type="text" id="promax-key-input" placeholder="MAX-XXXX" className="flex-1 bg-nebula-950 border border-purple-500/50 rounded-lg px-4 py-2 text-white font-mono uppercase focus:outline-none focus:border-purple-400" />
-                    {/* CHIAMATA AL BACKEND PER LA VERIFICA CHIAVE */}
-                    <button onClick={() => {
-                      const val = document.getElementById('promax-key-input').value.trim().toUpperCase();
-                      socket.emit('redeem_key', { userId: user.id, key: val });
-                    }} className="px-4 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-500">Riscatta</button>
+                    <button onClick={() => socket.emit('redeem_key', { userId: user.id, key: document.getElementById('promax-key-input').value.trim().toUpperCase() })} className="px-4 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-500">Riscatta</button>
                   </div>
                 </div>
               </div>
@@ -599,11 +609,7 @@ export default function App() {
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'settings' ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Impostazioni</h2>
-              {!user.isDarkWeb && (
-                <button onClick={() => buyTier('DARKWEB', 15000)} className="text-slate-700 hover:text-purple-500 transition-colors" title="???"><Eye className="w-5 h-5"/></button>
-              )}
             </div>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
               <div className="bg-nebula-900/60 p-6 border border-nebula-border rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-nebula-border/50 pb-2">Profilo e Personalizzazione</h3>
@@ -621,47 +627,23 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB DARK WEB */}
-          <div className={`h-full flex-col w-full bg-[#030008] ${ui.activeTab === 'darkweb' ? 'flex' : 'hidden'} animate-pulse`} style={{ animationDuration: '4s' }}>
-            {activeAssetObj && (
-              <>
-               <div className="p-4 md:p-6 border-b border-purple-900/50 bg-black flex flex-col md:flex-row justify-between md:items-start gap-4">
-                  <div className="flex flex-col flex-1">
-                    <div className="flex items-center space-x-3 mb-1"><h2 className="text-2xl font-black text-purple-500 tracking-widest">{activeAssetObj.name}</h2><span className="bg-purple-900 text-white px-2 py-0.5 rounded text-xs font-mono font-bold">{activeAssetObj.ticker}</span></div>
-                    <div className="mt-2 text-xs text-purple-400/70">{activeAssetObj.desc}</div>
-                  </div>
-                  <div className="text-left md:text-right shrink-0"><div className="text-3xl font-mono font-black text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]">{formatCurrency(activeAssetObj.currentPrice)}</div></div>
-                </div>
-                <div className="p-4 md:p-6 border-b border-purple-900/50 bg-[#020005] relative h-[400px]">
-                  <div 
-                    className="relative w-full h-full border border-purple-900 rounded-xl bg-black overflow-hidden"
-                    onMouseMove={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-                    }}
-                    onMouseLeave={() => setMousePos(null)}
-                  >
-                    <canvas ref={darkCanvasRef} className="absolute inset-0 w-full h-full cursor-crosshair hue-rotate-90"></canvas>
-                  </div>
-                </div>
-                <div className="p-4 md:p-6 bg-black flex-1">
-                  <div className="bg-purple-950/20 p-5 rounded-xl border border-purple-900 max-w-xl mx-auto">
-                    <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-purple-400 uppercase">Cassa Nascosta:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
-                    <div className="mb-4"><input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-black border border-purple-900 rounded-xl px-4 py-3 font-mono text-purple-300 text-lg font-bold outline-none" /></div>
-                    <div className="flex justify-between items-center font-mono text-sm mb-6 pb-4 border-b border-purple-900/50"><span className="text-purple-400">Rischio stimato:</span><span className="font-bold text-rose-500">MASSIMO</span></div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <button onClick={() => executeOrder('BUY')} className="py-3 bg-purple-800 hover:bg-purple-700 text-white rounded-xl font-bold uppercase tracking-widest border border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]">Compra</button>
-                      <button onClick={() => executeOrder('SELL')} className="py-3 bg-black hover:bg-zinc-900 text-slate-500 rounded-xl font-bold uppercase tracking-widest border border-zinc-800">Vendi</button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
           {/* TAB ADMIN */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'admin' ? 'flex' : 'hidden'}`}>
             <h2 className="text-2xl font-black text-rose-500 mb-6 flex items-center"><UserCog className="w-6 h-6 mr-3" /> Dev / Admin Panel</h2>
+            
+            {/* PANNELLO BACKUP DATI (Per non perdere i soldi agli aggiornamenti) */}
+            <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md mb-6 shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+              <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> Salvataggio e Ripristino Dati (Backup)</h3>
+              <p className="text-xs text-slate-400 mb-4">Usa queste funzioni prima e dopo aver riavviato/aggiornato il backend su Render per non perdere i soldi degli utenti.</p>
+              <div className="flex space-x-4">
+                <button onClick={() => socket.emit('admin_fetch_db')} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-sm flex items-center justify-center"><Download className="w-4 h-4 mr-2"/> 1. Scarica Dati</button>
+                <label className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-sm flex items-center justify-center cursor-pointer">
+                  <Upload className="w-4 h-4 mr-2"/> 2. Ripristina Dati
+                  <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
+                </label>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
@@ -669,7 +651,7 @@ export default function App() {
                 <div className="flex items-center space-x-4">
                   <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
                   <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: document.getElementById('adm-hh').value, mm: document.getElementById('adm-mm').value })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza</button></div>
+                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza</button></div>
                 </div>
               </div>
 
@@ -686,6 +668,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* NUOVA FUNZIONE: ISPEZIONE ACCOUNT */}
               <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl lg:col-span-2 backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione Account Utente</h3>
                 <div className="flex space-x-4 mb-4">
@@ -706,10 +689,9 @@ export default function App() {
                         <div className="text-[10px] uppercase text-slate-500 font-bold">Saldo Liquido</div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="grid grid-cols-2 gap-3 mb-4">
                       <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isProMax ? 'bg-purple-900/20 border-purple-500/50 text-purple-400' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>PRO MAX: {adminFetchedUser.isProMax ? 'ATTIVO' : 'NO'}</div>
                       <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isPro ? 'bg-amber-900/20 border-amber-500/50 text-amber-500' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>PRO: {adminFetchedUser.isPro ? 'ATTIVO' : 'NO'}</div>
-                      <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isDarkWeb ? 'bg-rose-900/20 border-rose-500/50 text-rose-500' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>DARK WEB: {adminFetchedUser.isDarkWeb ? 'SBLOCCATO' : 'NO'}</div>
                     </div>
                     <div>
                       <div className="text-xs text-slate-400 mb-3 uppercase font-bold tracking-wider">Portafoglio Asset ({Object.keys(adminFetchedUser.holdings || {}).length})</div>
@@ -720,11 +702,28 @@ export default function App() {
                             <span className="font-mono text-cyan-400">{h.shares} <span className="text-[10px] text-slate-500">pz</span></span>
                           </div>
                         ))}
-                        {Object.keys(adminFetchedUser.holdings || {}).length === 0 && <div className="text-xs text-slate-500 col-span-4">Nessun asset posseduto attualmente.</div>}
+                        {Object.keys(adminFetchedUser.holdings || {}).length === 0 && <div className="text-xs text-slate-500 col-span-4">Nessun asset posseduto.</div>}
                       </div>
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* ASSEGNAZIONE MANUALE ABBONAMENTO ADMIN */}
+              <div className="bg-nebula-900/60 p-6 border border-amber-900/50 rounded-xl backdrop-blur-md">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-amber-900/50 pb-2">Forza Abbonamento Utente</h3>
+                <div className="space-y-4">
+                  <div><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" id="adm-tier-uid" className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none mt-1" /></div>
+                  <div>
+                    <label className="text-xs text-slate-400">Livello Abbonamento</label>
+                    <select id="adm-tier-sel" className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none mt-1">
+                      <option value="STANDARD">Standard</option>
+                      <option value="PRO">PRO</option>
+                      <option value="PROMAX">PRO MAX</option>
+                    </select>
+                  </div>
+                  <button onClick={() => socket.emit('admin_action', { type: 'set_tier', userId: document.getElementById('adm-tier-uid').value, tier: document.getElementById('adm-tier-sel').value })} className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Abbonamento</button>
+                </div>
               </div>
 
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
@@ -819,7 +818,7 @@ export default function App() {
             {discordModal.type === 'WITHDRAW' ? (
               <>
                 <p className="text-xs text-slate-400 mb-4 text-center">Inserisci l'importo da prelevare dal tuo portafoglio. Genereremo una chiave univoca da consegnare allo staff per ricevere l'accredito.</p>
-                <input type="number" id="dm-amount" defaultValue="1000" min="1" step="any" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500" />
+                <input type="number" id="dm-amount" defaultValue="100" min="1" step="any" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500" />
                 <button onClick={requestWithdrawal} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold transition-colors">Genera Chiave di Prelievo</button>
               </>
             ) : (
