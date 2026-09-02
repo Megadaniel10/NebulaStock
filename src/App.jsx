@@ -21,7 +21,8 @@ let socket;
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' });
-  const [portfolio, setPortfolio] = useState({ cash: 0, holdings: {} });
+  // Di base i nuovi utenti partono con 100€
+  const [portfolio, setPortfolio] = useState({ cash: 100, holdings: {} });
   
   const [assets, setAssets] = useState({});
   const [gameTime, setGameTime] = useState({ hours: 9, minutes: 0 });
@@ -39,10 +40,14 @@ export default function App() {
   const [adminValidator, setAdminValidator] = useState(null);
 
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
-  const [adminCash, setAdminCash] = useState({ uid: '', amount: 1000, action: 'add' });
+  const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
   const [adminTime, setAdminTime] = useState({ hh: 9, mm: 0 });
   const [adminCodeInput, setAdminCodeInput] = useState("");
+  
+  // Stati per la nuova funzione Ispezione Utente
+  const [adminUserQuery, setAdminUserQuery] = useState("");
+  const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   
   const marketCanvasRef = useRef(null);
   const darkCanvasRef = useRef(null);
@@ -69,19 +74,41 @@ export default function App() {
     });
 
     socket.on('account_update', (acc) => {
-      setUser(prev => ({ ...prev, ...acc }));
-      setPortfolio({ cash: acc.cash || 0, holdings: acc.holdings || {} });
-      setIsAuth(true);
+      if (acc) {
+        setUser(prev => {
+          // PROTEZIONE BUG ACCOUNT: Non sovrascrive se è un altro utente
+          if (prev.id && prev.id !== acc.id) return prev; 
+          return { ...prev, ...acc };
+        });
+        setPortfolio({ cash: acc.cash || 0, holdings: acc.holdings || {} });
+        setIsAuth(true);
+      }
     });
 
     socket.on('force_wallet_update', ({ userId, acc }) => {
       setUser(current => {
+        // Se l'update globale riguarda ME, aggiorno i miei fondi
         if(current.id === userId) {
           setPortfolio({ cash: acc.cash, holdings: acc.holdings });
           return { ...current, ...acc };
         }
         return current;
       });
+      // Aggiorna in tempo reale la scheda admin se stiamo ispezionando proprio lui
+      setAdminFetchedUser(prev => {
+        if(prev && prev.id === userId) return { ...prev, ...acc };
+        return prev;
+      });
+    });
+
+    socket.on('admin_user_data', (data) => {
+      if(data) {
+        setAdminFetchedUser(data);
+        showToast("Dati utente recuperati con successo", "success");
+      } else {
+        setAdminFetchedUser(null);
+        showToast("Nessun utente trovato con questo ID", "error");
+      }
     });
 
     socket.on('chat_update', ({ room, chat }) => {
@@ -162,7 +189,6 @@ export default function App() {
     socket.emit('request_withdrawal', { userId: user.id, amount });
   };
 
-  // Funzione sicura per fare il login admin collegandosi al server
   const tryAdminLogin = () => {
     const pwd = prompt("Inserisci Password Dev Mode:");
     if(pwd) {
@@ -331,8 +357,6 @@ export default function App() {
           </div>
           <div className="p-4 flex flex-col space-y-4 justify-center md:justify-start items-center md:items-start">
             <button onClick={() => { localStorage.removeItem('nebulaState'); window.location.hash=''; window.location.reload(); }} className="text-slate-500 hover:text-rose-400 flex items-center space-x-2"><LogOut className="w-4 h-4"/><span className="hidden md:block text-xs">Disconnetti</span></button>
-            
-            {/* TASTO ADMIN CON PROTEZIONE SERVER-SIDE */}
             <button onClick={tryAdminLogin} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-slate-500'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
           </div>
         </nav>
@@ -414,10 +438,10 @@ export default function App() {
                   
                   <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
                     <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
-                      {(activeAssetObj.type === 'stocks' && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
-                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Azionario Chiuso</span></div>
+                      {(!activeAssetObj.type.includes('promax') && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
+                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Chiuso</span></div>
                       )}
-                      {(activeAssetObj.type?.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
+                      {(activeAssetObj.type.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
                       )}
                       <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
@@ -669,13 +693,55 @@ export default function App() {
                 </div>
               </div>
 
+              {/* NUOVA FUNZIONE: ISPEZIONE ACCOUNT */}
+              <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl lg:col-span-2 backdrop-blur-md">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione Account Utente</h3>
+                <div className="flex space-x-4 mb-4">
+                  <input type="text" value={adminUserQuery} onChange={e => setAdminUserQuery(e.target.value)} placeholder="ID Utente Discord (es. 123456789)" className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" />
+                  <button onClick={() => socket.emit('admin_fetch_user', adminUserQuery.trim())} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded">Cerca Utente</button>
+                </div>
+
+                {adminFetchedUser && (
+                  <div className="bg-nebula-950/80 p-5 rounded-xl border border-cyan-500/30 text-sm mt-4">
+                    <div className="flex items-center space-x-4 mb-4 border-b border-nebula-border/50 pb-4">
+                      <img src={adminFetchedUser.avatar || `https://ui-avatars.com/api/?name=${adminFetchedUser.name}`} className="w-12 h-12 rounded-full border border-nebula-border" alt="Avatar" />
+                      <div>
+                        <div className="font-bold text-xl" style={{color: adminFetchedUser.colorName || '#fff'}}>{adminFetchedUser.name}</div>
+                        <div className="text-xs text-slate-500 font-mono">ID: {adminFetchedUser.id}</div>
+                      </div>
+                      <div className="ml-auto text-right">
+                        <div className="text-2xl font-mono font-black text-emerald-400">{formatCurrency(adminFetchedUser.cash)}</div>
+                        <div className="text-[10px] uppercase text-slate-500 font-bold">Saldo Liquido</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isProMax ? 'bg-purple-900/20 border-purple-500/50 text-purple-400' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>PRO MAX: {adminFetchedUser.isProMax ? 'ATTIVO' : 'NO'}</div>
+                      <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isPro ? 'bg-amber-900/20 border-amber-500/50 text-amber-500' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>PRO: {adminFetchedUser.isPro ? 'ATTIVO' : 'NO'}</div>
+                      <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isDarkWeb ? 'bg-rose-900/20 border-rose-500/50 text-rose-500' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>DARK WEB: {adminFetchedUser.isDarkWeb ? 'SBLOCCATO' : 'NO'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400 mb-3 uppercase font-bold tracking-wider">Portafoglio Asset ({Object.keys(adminFetchedUser.holdings || {}).length})</div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {Object.entries(adminFetchedUser.holdings || {}).map(([t, h]) => (
+                          <div key={t} className="bg-nebula-900 p-3 rounded-lg border border-nebula-border flex justify-between items-center">
+                            <span className="font-bold text-white text-sm">{t}</span>
+                            <span className="font-mono text-cyan-400">{h.shares} <span className="text-[10px] text-slate-500">pz</span></span>
+                          </div>
+                        ))}
+                        {Object.keys(adminFetchedUser.holdings || {}).length === 0 && <div className="text-xs text-slate-500 col-span-4">Nessun asset posseduto attualmente.</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Banca Centrale: Forza Saldo Utente</h3>
                 <div className="space-y-4">
                   <div><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" value={adminCash.uid} onChange={e => setAdminCash({...adminCash, uid: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none mt-1" /></div>
                   
                   <div className="flex space-x-2">
-                    <div className="flex-1"><label className="text-xs text-slate-400">Azione</label><select value={adminCash.action} onChange={e => setAdminCash({...adminCash, action: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none mt-1"><option value="add">Aggiungi (+)</option><option value="sub">Rimuovi (-)</option><option value="set">Imposta a (=)</option><option value="reset">Reset (10.000)</option></select></div>
+                    <div className="flex-1"><label className="text-xs text-slate-400">Azione</label><select value={adminCash.action} onChange={e => setAdminCash({...adminCash, action: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none mt-1"><option value="add">Aggiungi (+)</option><option value="sub">Rimuovi (-)</option><option value="set">Imposta a (=)</option><option value="reset">Reset (100€)</option></select></div>
                     <div className="flex-1"><label className="text-xs text-slate-400">Importo (€)</label><input type="number" step="any" disabled={adminCash.action === 'reset'} value={adminCash.amount} onChange={e => setAdminCash({...adminCash, amount: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none mt-1 disabled:opacity-50" /></div>
                   </div>
                   
@@ -700,7 +766,7 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                         <span className="text-slate-400">Utente:</span><span className="text-white font-bold">{adminValidator.name}</span>
                         <span className="text-slate-400">Importo richiesto:</span><span className="text-white font-bold text-lg">{formatCurrency(adminValidator.amount)}</span>
-                        <span className="text-slate-400">Data richiesta:</span><span className="text-white">{adminValidator.date}</span>
+                        <span className="text-slate-400">Data:</span><span className="text-white">{adminValidator.date}</span>
                       </div>
                       <p className="mt-3 text-xs text-emerald-300">I soldi sono già stati scalati dal conto. Eroga il pagamento reale.</p>
                     </div>
