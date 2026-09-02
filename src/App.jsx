@@ -14,28 +14,8 @@ const BACKEND_URL = "https://nebulastock-backend.onrender.com";
 const PRO_KEYS = Array.from({ length: 60 }, (_, i) => `NBL-PRO-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
 PRO_KEYS.splice(0, 10, "NBL-PRO-A1B2-C3D4", "NBL-PRO-X9Y8-Z7W6", "NBL-PRO-Q1W2-E3R4", "NBL-PRO-T5Y6-U7I8", "NBL-PRO-O9P0-A1S2", "NBL-PRO-D3F4-G5H6", "NBL-PRO-J7K8-L9Z0", "NBL-PRO-X1C2-V3B4", "NBL-PRO-N5M6-Q7W8", "NBL-PRO-E9R0-T1Y2");
 
-const PROMAX_KEYS = [
-  "MAX-7K9W2M4P",
-  "MAX-X4B8R9TZ",
-  "MAX-Q3L7N2V9",
-  "MAX-M9P1K6WC",
-  "MAX-H8J4V5XD",
-  "MAX-Y2C9T8NB",
-  "MAX-R7W1L3PQ",
-  "MAX-D5K8M2VX",
-  "MAX-T9N4B7CJ",
-  "MAX-V1L6X9PZ",
-  "MAX-W3P8K2TR",
-  "MAX-K7R9M4VB",
-  "MAX-B2X5N8TJ",
-  "MAX-N9W4P1LD",
-  "MAX-C8J3V7QX",
-  "MAX-L2T9K6PR",
-  "MAX-Z5M8N2WC",
-  "MAX-P4R7X9VJ",
-  "MAX-X1K6B8TL",
-  "MAX-J9W3M7PD"
-];
+const PROMAX_KEYS = ["MAX-123", "MAX-ABC"]; 
+
 let socket;
 
 export default function App() {
@@ -58,7 +38,6 @@ export default function App() {
   const [discordModal, setDiscordModal] = useState({ open: false, type: '', code: '' });
   const [adminValidator, setAdminValidator] = useState(null);
 
-  // Stati Admin
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 1000, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
@@ -95,7 +74,6 @@ export default function App() {
       setIsAuth(true);
     });
 
-    // FIX BUG SOLDI ADMIN: Aggiorna il portafoglio SOLO se l'ID coincide col tuo
     socket.on('force_wallet_update', ({ userId, acc }) => {
       setUser(current => {
         if(current.id === userId) {
@@ -182,6 +160,21 @@ export default function App() {
     const amount = parseFloat(document.getElementById('dm-amount').value);
     if(isNaN(amount) || amount <= 0) return showToast("Importo non valido.", "error");
     socket.emit('request_withdrawal', { userId: user.id, amount });
+  };
+
+  // Funzione sicura per fare il login admin collegandosi al server
+  const tryAdminLogin = () => {
+    const pwd = prompt("Inserisci Password Dev Mode:");
+    if(pwd) {
+      socket.emit('admin_login', pwd, (response) => {
+        if(response.success) {
+          setUi(p => ({...p, activeTab: 'admin'}));
+          showToast("Pannello Admin Sbloccato", "success");
+        } else {
+          showToast(response.message, "error");
+        }
+      });
+    }
   };
 
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
@@ -338,7 +331,9 @@ export default function App() {
           </div>
           <div className="p-4 flex flex-col space-y-4 justify-center md:justify-start items-center md:items-start">
             <button onClick={() => { localStorage.removeItem('nebulaState'); window.location.hash=''; window.location.reload(); }} className="text-slate-500 hover:text-rose-400 flex items-center space-x-2"><LogOut className="w-4 h-4"/><span className="hidden md:block text-xs">Disconnetti</span></button>
-            <button onClick={() => { if (prompt("Password Dev Mode:") === "StefanoSindaco123") { setUi(p => ({...p, activeTab: 'admin'})); showToast("Pannello Admin Sbloccato", "success"); } else { showToast("Password Errata", "error"); } }} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-slate-500'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
+            
+            {/* TASTO ADMIN CON PROTEZIONE SERVER-SIDE */}
+            <button onClick={tryAdminLogin} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-slate-500'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
           </div>
         </nav>
 
@@ -355,7 +350,7 @@ export default function App() {
                 )}
               </div>
               <div className="flex-1 overflow-y-auto custom-scroll p-2 space-y-1">
-                {Object.values(assets || {}).filter(a => ui.activeMarketType.includes('promax') ? a.type.includes('promax') : a.type === ui.activeMarketType).map(asset => (
+                {Object.values(assets || {}).filter(a => ui.activeMarketType.includes('promax') ? a.type?.includes('promax') : a.type === ui.activeMarketType).map(asset => (
                   <div key={asset.ticker} onClick={() => setUi(p => ({...p, activeAsset: asset.ticker}))} className={`cursor-pointer p-3 rounded-lg border flex justify-between items-center transition-colors ${asset.ticker === ui.activeAsset ? 'bg-nebula-800/80 border-nebula-700' : 'border-transparent hover:bg-nebula-800/40'}`}>
                     <div>
                       <div className="font-bold text-white text-sm flex items-center space-x-2">
@@ -419,10 +414,10 @@ export default function App() {
                   
                   <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
                     <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
-                      {(!activeAssetObj.type.includes('promax') && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
-                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Chiuso</span></div>
+                      {(activeAssetObj.type === 'stocks' && (gameTime?.hours < 9 || gameTime?.hours >= 18)) && (
+                        <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Azionario Chiuso</span></div>
                       )}
-                      {(activeAssetObj.type.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
+                      {(activeAssetObj.type?.includes('promax') && (gameTime?.hours < 5 || gameTime?.hours >= 22)) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura alle 05:00</span></div>
                       )}
                       <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
@@ -647,7 +642,7 @@ export default function App() {
             )}
           </div>
 
-          {/* TAB ADMIN (AGGIORNATA SECONDO REQUISITI) */}
+          {/* TAB ADMIN */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'admin' ? 'flex' : 'hidden'}`}>
             <h2 className="text-2xl font-black text-rose-500 mb-6 flex items-center"><UserCog className="w-6 h-6 mr-3" /> Dev / Admin Panel</h2>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -655,8 +650,8 @@ export default function App() {
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server</h3>
                 <div className="flex items-center space-x-4">
-                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
                   <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: document.getElementById('adm-hh').value, mm: document.getElementById('adm-mm').value })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza</button></div>
                 </div>
               </div>
@@ -674,7 +669,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* FIX BUG SOLDI - NUOVO PANNELLO */}
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Banca Centrale: Forza Saldo Utente</h3>
                 <div className="space-y-4">
@@ -749,6 +743,7 @@ export default function App() {
                   showToast("Lancio IPO effettuato sul server centrale.", "success");
                 }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
               </div>
+
             </div>
           </div>
 
