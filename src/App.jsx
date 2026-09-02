@@ -9,7 +9,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND SU RENDER:
-const BACKEND_URL = "https://nebulastock-backend.onrender.com"; 
+const BACKEND_URL = "https://pretty-cougars-end.loca.lt"; 
 
 let socket;
 
