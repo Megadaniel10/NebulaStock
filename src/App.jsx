@@ -11,17 +11,11 @@ const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND SU RENDER:
 const BACKEND_URL = "https://nebulastock-backend.onrender.com"; 
 
-const PRO_KEYS = Array.from({ length: 60 }, (_, i) => `NBL-PRO-${Math.random().toString(36).substring(2, 10).toUpperCase()}`);
-PRO_KEYS.splice(0, 10, "NBL-PRO-A1B2-C3D4", "NBL-PRO-X9Y8-Z7W6", "NBL-PRO-Q1W2-E3R4", "NBL-PRO-T5Y6-U7I8", "NBL-PRO-O9P0-A1S2", "NBL-PRO-D3F4-G5H6", "NBL-PRO-J7K8-L9Z0", "NBL-PRO-X1C2-V3B4", "NBL-PRO-N5M6-Q7W8", "NBL-PRO-E9R0-T1Y2");
-
-const PROMAX_KEYS = ["MAX-123", "MAX-ABC"]; 
-
 let socket;
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, isDarkWeb: false, bgImage: '' });
-  // Di base i nuovi utenti partono con 100€
   const [portfolio, setPortfolio] = useState({ cash: 100, holdings: {} });
   
   const [assets, setAssets] = useState({});
@@ -42,10 +36,8 @@ export default function App() {
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
-  const [adminTime, setAdminTime] = useState({ hh: 9, mm: 0 });
   const [adminCodeInput, setAdminCodeInput] = useState("");
   
-  // Stati per la nuova funzione Ispezione Utente
   const [adminUserQuery, setAdminUserQuery] = useState("");
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   
@@ -76,7 +68,6 @@ export default function App() {
     socket.on('account_update', (acc) => {
       if (acc) {
         setUser(prev => {
-          // PROTEZIONE BUG ACCOUNT: Non sovrascrive se è un altro utente
           if (prev.id && prev.id !== acc.id) return prev; 
           return { ...prev, ...acc };
         });
@@ -87,14 +78,12 @@ export default function App() {
 
     socket.on('force_wallet_update', ({ userId, acc }) => {
       setUser(current => {
-        // Se l'update globale riguarda ME, aggiorno i miei fondi
         if(current.id === userId) {
           setPortfolio({ cash: acc.cash, holdings: acc.holdings });
           return { ...current, ...acc };
         }
         return current;
       });
-      // Aggiorna in tempo reale la scheda admin se stiamo ispezionando proprio lui
       setAdminFetchedUser(prev => {
         if(prev && prev.id === userId) return { ...prev, ...acc };
         return prev;
@@ -357,6 +346,8 @@ export default function App() {
           </div>
           <div className="p-4 flex flex-col space-y-4 justify-center md:justify-start items-center md:items-start">
             <button onClick={() => { localStorage.removeItem('nebulaState'); window.location.hash=''; window.location.reload(); }} className="text-slate-500 hover:text-rose-400 flex items-center space-x-2"><LogOut className="w-4 h-4"/><span className="hidden md:block text-xs">Disconnetti</span></button>
+            
+            {/* TASTO ADMIN CON PROTEZIONE SERVER-SIDE */}
             <button onClick={tryAdminLogin} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-slate-500'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
           </div>
         </nav>
@@ -563,9 +554,10 @@ export default function App() {
                   <p className="text-xs text-slate-500 mb-2">Oppure usa un codice licenza PRO:</p>
                   <div className="flex space-x-2">
                     <input type="text" id="pro-key-input" placeholder="NBL-PRO-XXXX" className="flex-1 bg-nebula-950 border border-amber-500/50 rounded-lg px-4 py-2 text-white font-mono uppercase focus:outline-none focus:border-amber-400" />
+                    {/* CHIAMATA AL BACKEND PER LA VERIFICA CHIAVE */}
                     <button onClick={() => {
                       const val = document.getElementById('pro-key-input').value.trim().toUpperCase();
-                      if(PRO_KEYS.includes(val)) { buyTier('PRO', 0); showToast("Codice Accettato", "success"); } else showToast("Codice errato.", "error");
+                      socket.emit('redeem_key', { userId: user.id, key: val });
                     }} className="px-4 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-500">Riscatta</button>
                   </div>
                 </div>
@@ -592,9 +584,10 @@ export default function App() {
                   <p className="text-xs text-slate-500 mb-2">Codice licenza PRO MAX:</p>
                   <div className="flex space-x-2">
                     <input type="text" id="promax-key-input" placeholder="MAX-XXXX" className="flex-1 bg-nebula-950 border border-purple-500/50 rounded-lg px-4 py-2 text-white font-mono uppercase focus:outline-none focus:border-purple-400" />
+                    {/* CHIAMATA AL BACKEND PER LA VERIFICA CHIAVE */}
                     <button onClick={() => {
                       const val = document.getElementById('promax-key-input').value.trim().toUpperCase();
-                      if(PROMAX_KEYS.includes(val)) { buyTier('PROMAX', 0); showToast("Ascensione Completata", "success"); } else showToast("Codice errato.", "error");
+                      socket.emit('redeem_key', { userId: user.id, key: val });
                     }} className="px-4 py-2 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-500">Riscatta</button>
                   </div>
                 </div>
@@ -693,7 +686,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* NUOVA FUNZIONE: ISPEZIONE ACCOUNT */}
               <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl lg:col-span-2 backdrop-blur-md">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione Account Utente</h3>
                 <div className="flex space-x-4 mb-4">
