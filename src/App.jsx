@@ -9,7 +9,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND SU RENDER:
-const BACKEND_URL = "https://nebulaterminal-live.loca.lt"; 
+const BACKEND_URL = "https://nebulaterminal-kfshgjxk136.loca.lt"; 
 
 let socket;
 
