@@ -50,7 +50,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    socket = io(BACKEND_URL);
+    socket = io(BACKEND_URL, {
+  extraHeaders: {
+    "ngrok-skip-browser-warning": "true"
+  }
+});
 
     socket.on('market_init', (data) => {
       setAssets(data.assets || {});
