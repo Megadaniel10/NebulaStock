@@ -9,7 +9,6 @@ import {
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
-// METTI QUI IL LINK DEL TUO BACKEND
 const BACKEND_URL = "https://wav-breakdown-exhibitions-donor.trycloudflare.com"; 
 
 let socket;
@@ -38,10 +37,11 @@ export default function App() {
   const [adminLogs, setAdminLogs] = useState([]);
 
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
-  const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '' });
+  const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '', vol: '' });
   const [adminCodeInput, setAdminCodeInput] = useState("");
   const [adminUserQuery, setAdminUserQuery] = useState("");
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
   
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
@@ -119,7 +119,7 @@ export default function App() {
     });
     
     socket.on('admin_logs_data', (logs) => {
-        setAdminLogs(logs.reverse()); // Mostra dal più recente
+      setAdminLogs(logs.reverse());
     });
 
     socket.on('chat_update', ({ room, chat }) => {
@@ -134,8 +134,8 @@ export default function App() {
 
     socket.on('admin_code_result', ({ valid, data, special }) => {
       if(valid) {
-          if (special) setDiscordModal({ open: true, type: 'FUND_WITHDRAWAL', code: special, netAmount: data.amount });
-          else setAdminValidator(data);
+        if (special) setDiscordModal({ open: true, type: 'FUND_WITHDRAWAL', code: special, netAmount: data.amount });
+        else setAdminValidator(data);
       }
     });
 
@@ -157,13 +157,13 @@ export default function App() {
   useEffect(() => {
     if (Object.keys(assets).length === 0 || !user.isPro) return;
     priceAlerts.forEach(alert => {
-        if (!alert.triggered && assets[alert.ticker] && assets[alert.ticker].currentPrice >= alert.target) {
-            const audioUrl = alert.mp3 && alert.mp3.trim() !== '' ? alert.mp3 : "https://actions.google.com/sounds/v1/alarms/beep_short.ogg";
-            const audio = new Audio(audioUrl);
-            audio.play().catch(e => console.log("Audio bloccato dal browser"));
-            showToast(`🚨 ALERT: ${alert.ticker} ha raggiunto il target!`, "success");
-            setPriceAlerts(prev => prev.map(a => a.id === alert.id ? {...a, triggered: true} : a));
-        }
+      if (!alert.triggered && assets[alert.ticker] && assets[alert.ticker].currentPrice >= alert.target) {
+        const audioUrl = alert.mp3 && alert.mp3.trim() !== '' ? alert.mp3 : "https://actions.google.com/sounds/v1/alarms/beep_short.ogg";
+        const audio = new Audio(audioUrl);
+        audio.play().catch(() => console.log("Audio bloccato dal browser"));
+        showToast(`🚨 ALERT: ${alert.ticker} ha raggiunto il target!`, "success");
+        setPriceAlerts(prev => prev.map(a => a.id === alert.id ? {...a, triggered: true} : a));
+      }
     });
   }, [assets, priceAlerts, user.isPro]);
 
@@ -200,6 +200,15 @@ export default function App() {
     setChatInput('');
   };
 
+  const createPrivateChat = () => {
+    const uname = prompt("Inserisci nametag Discord (es. Nome#1234):");
+    if(uname && uname.trim() !== '') {
+      const roomKey = `dm-${uname.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      setDmRooms(p => p.find(r => r.id === roomKey) ? p : [...p, { id: roomKey, display: uname }]);
+      setUi(p => ({ ...p, activeChatRoom: roomKey }));
+    }
+  };
+
   const requestWithdrawal = () => {
     const amount = parseFloat(document.getElementById('dm-amount').value);
     if(isNaN(amount) || amount <= 0) return showToast("Importo non valido.", "error");
@@ -207,31 +216,46 @@ export default function App() {
   };
 
   const handleDownloadLogs = () => {
-      const text = adminLogs.join('\n');
-      const blob = new Blob([text], {type: 'text/plain'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `nebula_logs_${new Date().toISOString().split('T')[0]}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
+    const text = adminLogs.join('\n');
+    const blob = new Blob([text], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nebula_logs_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreDb = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const json = JSON.parse(evt.target.result);
+        socket.emit('admin_restore_db', json);
+      } catch(err) {
+        showToast("File JSON non valido", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; 
   };
 
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
   const isMarketOpen = gameTime.isExtraordinary || (gameTime?.hours >= 8 && gameTime?.hours < 19) || (gameTime?.hours === 19 && gameTime?.minutes < 30);
   
-  // Calcolo Commissioni in Tempo Reale
   let dynamicFee = 0;
   if (activeAssetObj) {
-      let tierLimit = user.isProMax ? 100000 : (user.isPro ? 50000 : 25000);
-      let currentVal = (portfolio.holdings[activeAssetObj.ticker]?.shares || 0) * activeAssetObj.currentPrice;
-      let newVal = currentVal + (parseFloat(tradeQty || 0) * activeAssetObj.currentPrice);
-      if (newVal > tierLimit) {
-          let overLimitVal = newVal - tierLimit;
-          if (currentVal >= tierLimit) overLimitVal = parseFloat(tradeQty || 0) * activeAssetObj.currentPrice;
-          let overShares = overLimitVal / activeAssetObj.currentPrice;
-          dynamicFee = overShares * 0.50;
-      }
+    let tierLimit = user.isProMax ? 100000 : (user.isPro ? 50000 : 25000);
+    let currentVal = (portfolio.holdings[activeAssetObj.ticker]?.shares || 0) * activeAssetObj.currentPrice;
+    let newVal = currentVal + (parseFloat(tradeQty || 0) * activeAssetObj.currentPrice);
+    if (newVal > tierLimit) {
+      let overLimitVal = newVal - tierLimit;
+      if (currentVal >= tierLimit) overLimitVal = parseFloat(tradeQty || 0) * activeAssetObj.currentPrice;
+      let overShares = overLimitVal / activeAssetObj.currentPrice;
+      dynamicFee = overShares * 0.50;
+    }
   }
 
   useEffect(() => {
@@ -473,18 +497,17 @@ export default function App() {
                       
                       <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
                       
-                      {/* Avviso Cap e Commissioni */}
                       <div className="mb-2 text-[10px] text-slate-400 flex justify-between">
-                          <span>Cap Massimo Esentasse: <span className="font-bold text-slate-300">{formatCurrency(user.isProMax ? 100000 : (user.isPro ? 50000 : 25000))}</span></span>
-                          {dynamicFee > 0 && <span className="text-rose-400 font-bold flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Extra Fee applicata</span>}
+                        <span>Cap Massimo Esentasse: <span className="font-bold text-slate-300">{formatCurrency(user.isProMax ? 100000 : (user.isPro ? 50000 : 25000))}</span></span>
+                        {dynamicFee > 0 && <span className="text-rose-400 font-bold flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Extra Fee applicata</span>}
                       </div>
 
                       <div className="mb-4"><input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className={`w-full bg-nebula-950/80 border ${dynamicFee > 0 ? 'border-rose-500' : 'border-nebula-border'} rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500`} /></div>
                       
                       <div className="flex flex-col space-y-1 font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50">
-                          <div className="flex justify-between items-center"><span className="text-slate-400">Controvalore Azioni:</span><span className="font-bold text-white">{formatCurrency((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
-                          {dynamicFee > 0 && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Commissione Extra (Over-Cap):</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
-                          {dynamicFee > 0 && <div className="flex justify-between items-center text-emerald-400 mt-2 border-t border-nebula-border/50 pt-2"><span className="text-xs uppercase font-bold">Totale Ordine:</span><span className="font-bold">{formatCurrency(((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice) + dynamicFee)}</span></div>}
+                        <div className="flex justify-between items-center"><span className="text-slate-400">Controvalore Azioni:</span><span className="font-bold text-white">{formatCurrency((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
+                        {dynamicFee > 0 && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Commissione Extra (Over-Cap):</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
+                        {dynamicFee > 0 && <div className="flex justify-between items-center text-emerald-400 mt-2 border-t border-nebula-border/50 pt-2"><span className="text-xs uppercase font-bold">Totale Ordine:</span><span className="font-bold">{formatCurrency(((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice) + dynamicFee)}</span></div>}
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
@@ -527,7 +550,7 @@ export default function App() {
                         <td className="p-4 font-bold text-white flex items-center space-x-2"><span>{asset.ticker}</span></td><td className="p-4">{h.shares}</td><td className="p-4 text-slate-400">{formatCurrency(h.avgPrice)}</td><td className="p-4 text-white">{formatCurrency(asset.currentPrice)}</td>
                         <td className={`p-4 font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</td>
                         <td className="p-4 text-right"><button onClick={() => {
-                             socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
+                          socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
                         }} className="text-xs bg-rose-600/20 text-rose-400 px-3 py-1 rounded hover:bg-rose-600/40">Vendi Tutto</button></td>
                       </tr>
                     );
@@ -660,49 +683,49 @@ export default function App() {
 
               {/* Price Alerts */}
               {user.isPro && (
-                  <div className="bg-nebula-900/60 p-6 border border-amber-500/30 rounded-xl backdrop-blur-md">
-                      <h3 className="text-lg font-bold text-amber-500 mb-4 border-b border-amber-500/30 pb-2 flex items-center"><Bell className="w-5 h-5 mr-2"/> Notifiche di Prezzo (PRO)</h3>
-                      <p className="text-xs text-slate-400 mb-4">Imposta un target e ricevi un avviso sonoro se il prezzo supera la soglia.</p>
-                      
-                      <div className="space-y-3 mb-6">
-                        <div>
-                            <label className="text-xs text-slate-400 block mb-1">Asset Posseduto</label>
-                            <select value={newAlert.ticker} onChange={e => setNewAlert({...newAlert, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">
-                                <option value="">Seleziona...</option>
-                                {Object.keys(portfolio.holdings || {}).map(k => <option key={k} value={k}>{k}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="text-xs text-slate-400 block mb-1">Target Price (€)</label>
-                            <input type="number" step="any" value={newAlert.target} onChange={e => setNewAlert({...newAlert, target: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-slate-400 block mb-1">URL Audio MP3 (Opzionale)</label>
-                            <input type="text" placeholder="Lascia vuoto per standard" value={newAlert.mp3} onChange={e => setNewAlert({...newAlert, mp3: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-xs outline-none" />
-                        </div>
-                        <button onClick={() => {
-                            if(!newAlert.ticker || !newAlert.target) return showToast("Compila Asset e Target", "error");
-                            setPriceAlerts(p => [...p, { id: Date.now(), ticker: newAlert.ticker, target: parseFloat(newAlert.target), mp3: newAlert.mp3, triggered: false }]);
-                            setNewAlert({ticker: '', target: '', mp3: ''});
-                            showToast("Allarme impostato!", "success");
-                        }} className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-sm transition-colors">Aggiungi Alert</button>
-                      </div>
-
-                      <div className="space-y-2">
-                          {priceAlerts.map(alert => (
-                              <div key={alert.id} className="flex justify-between items-center bg-nebula-950 p-2 rounded border border-nebula-border text-xs">
-                                  <span className="font-bold text-white">{alert.ticker}</span>
-                                  <span className="font-mono text-slate-300">&gt;= {formatCurrency(alert.target)}</span>
-                                  {alert.triggered ? (
-                                      <span className="text-emerald-500 font-bold">Raggiunto</span>
-                                  ) : (
-                                      <button onClick={() => setPriceAlerts(p => p.filter(a => a.id !== alert.id))} className="text-rose-500 hover:text-rose-400"><Trash2 className="w-4 h-4"/></button>
-                                  )}
-                              </div>
-                          ))}
-                          {priceAlerts.length === 0 && <div className="text-xs text-slate-500 text-center">Nessun alert attivo.</div>}
-                      </div>
+                <div className="bg-nebula-900/60 p-6 border border-amber-500/30 rounded-xl backdrop-blur-md">
+                  <h3 className="text-lg font-bold text-amber-500 mb-4 border-b border-amber-500/30 pb-2 flex items-center"><Bell className="w-5 h-5 mr-2"/> Notifiche di Prezzo (PRO)</h3>
+                  <p className="text-xs text-slate-400 mb-4">Imposta un target e ricevi un avviso sonoro se il prezzo supera la soglia.</p>
+                  
+                  <div className="space-y-3 mb-6">
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Asset Posseduto</label>
+                      <select value={newAlert.ticker} onChange={e => setNewAlert({...newAlert, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">
+                        <option value="">Seleziona...</option>
+                        {Object.keys(portfolio.holdings || {}).map(k => <option key={k} value={k}>{k}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Target Price (€)</label>
+                      <input type="number" step="any" value={newAlert.target} onChange={e => setNewAlert({...newAlert, target: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">URL Audio MP3 (Opzionale)</label>
+                      <input type="text" placeholder="Lascia vuoto per standard" value={newAlert.mp3} onChange={e => setNewAlert({...newAlert, mp3: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-xs outline-none" />
+                    </div>
+                    <button onClick={() => {
+                      if(!newAlert.ticker || !newAlert.target) return showToast("Compila Asset e Target", "error");
+                      setPriceAlerts(p => [...p, { id: Date.now(), ticker: newAlert.ticker, target: parseFloat(newAlert.target), mp3: newAlert.mp3, triggered: false }]);
+                      setNewAlert({ticker: '', target: '', mp3: ''});
+                      showToast("Allarme impostato!", "success");
+                    }} className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-sm transition-colors">Aggiungi Alert</button>
                   </div>
+
+                  <div className="space-y-2">
+                    {priceAlerts.map(alert => (
+                      <div key={alert.id} className="flex justify-between items-center bg-nebula-950 p-2 rounded border border-nebula-border text-xs">
+                        <span className="font-bold text-white">{alert.ticker}</span>
+                        <span className="font-mono text-slate-300">&gt;= {formatCurrency(alert.target)}</span>
+                        {alert.triggered ? (
+                          <span className="text-emerald-500 font-bold">Raggiunto</span>
+                        ) : (
+                          <button onClick={() => setPriceAlerts(p => p.filter(a => a.id !== alert.id))} className="text-rose-500 hover:text-rose-400"><Trash2 className="w-4 h-4"/></button>
+                        )}
+                      </div>
+                    ))}
+                    {priceAlerts.length === 0 && <div className="text-xs text-slate-500 text-center">Nessun alert attivo.</div>}
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -710,70 +733,70 @@ export default function App() {
           {/* TAB ADMIN */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'admin' && user.isAdmin ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black text-rose-500 flex items-center"><UserCog className="w-6 h-6 mr-3" /> Dev / Admin Panel</h2>
-                <button onClick={() => socket.emit('admin_action', { type: 'toggle_extra_market' })} className={`px-4 py-2 font-bold rounded-lg border flex items-center shadow-lg transition-all ${gameTime.isExtraordinary ? 'bg-rose-600 border-rose-500 text-white' : 'bg-nebula-800 border-nebula-border text-slate-400 hover:text-white'}`}>
-                    <Store className="w-4 h-4 mr-2"/> {gameTime.isExtraordinary ? 'SPEGNI Mercato Straordinario' : 'ACCENDI Mercato Straordinario'}
-                </button>
+              <h2 className="text-2xl font-black text-rose-500 flex items-center"><UserCog className="w-6 h-6 mr-3" /> Dev / Admin Panel</h2>
+              <button onClick={() => socket.emit('admin_action', { type: 'toggle_extra_market' })} className={`px-4 py-2 font-bold rounded-lg border flex items-center shadow-lg transition-all ${gameTime.isExtraordinary ? 'bg-rose-600 border-rose-500 text-white' : 'bg-nebula-800 border-nebula-border text-slate-400 hover:text-white'}`}>
+                <Store className="w-4 h-4 mr-2"/> {gameTime.isExtraordinary ? 'SPEGNI Mercato Straordinario' : 'ACCENDI Mercato Straordinario'}
+              </button>
             </div>
 
             {/* SEZIONE LOGS E BACKUP */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
-                  <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> Salvataggio Database (JSON)</h3>
-                  <p className="text-xs text-slate-400 mb-4">Salva regolarmente il database prima di riavviare il server.</p>
-                  <div className="flex space-x-4">
-                    <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-sm flex items-center justify-center"><Download className="w-4 h-4 mr-2"/> 1. Scarica DB</button>
-                    <label className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-sm flex items-center justify-center cursor-pointer">
-                      <Upload className="w-4 h-4 mr-2"/> 2. Ripristina DB
-                      <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
-                    </label>
-                  </div>
+              <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+                <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> Salvataggio Database (JSON)</h3>
+                <p className="text-xs text-slate-400 mb-4">Salva regolarmente il database prima di riavviare il server.</p>
+                <div className="flex space-x-4">
+                  <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-sm flex items-center justify-center"><Download className="w-4 h-4 mr-2"/> 1. Scarica DB</button>
+                  <label className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-sm flex items-center justify-center cursor-pointer">
+                    <Upload className="w-4 h-4 mr-2"/> 2. Ripristina DB
+                    <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
+                  </label>
                 </div>
+              </div>
 
-                <div className="bg-nebula-900/60 p-6 border border-slate-700 rounded-xl backdrop-blur-md flex flex-col">
-                  <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
-                      <h3 className="text-lg font-bold text-white flex items-center"><ScrollText className="w-5 h-5 mr-2 text-slate-400"/> Registro Eventi / Log</h3>
-                      <button onClick={handleDownloadLogs} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1 rounded text-white flex items-center"><Download className="w-3 h-3 mr-1"/> Scarica .txt</button>
-                  </div>
-                  <div className="flex-1 bg-black/50 border border-nebula-border rounded p-2 overflow-y-auto font-mono text-[10px] text-slate-300 h-32 custom-scroll">
-                      {adminLogs.map((log, i) => <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>)}
-                      {adminLogs.length === 0 && <div className="text-slate-600">Nessun log disponibile.</div>}
-                  </div>
+              <div className="bg-nebula-900/60 p-6 border border-slate-700 rounded-xl backdrop-blur-md flex flex-col">
+                <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
+                  <h3 className="text-lg font-bold text-white flex items-center"><ScrollText className="w-5 h-5 mr-2 text-slate-400"/> Registro Eventi / Log</h3>
+                  <button onClick={handleDownloadLogs} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1 rounded text-white flex items-center"><Download className="w-3 h-3 mr-1"/> Scarica .txt</button>
                 </div>
+                <div className="flex-1 bg-black/50 border border-nebula-border rounded p-2 overflow-y-auto font-mono text-[10px] text-slate-300 h-32 custom-scroll">
+                  {adminLogs.map((log, i) => <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>)}
+                  {adminLogs.length === 0 && <div className="text-slate-600">Nessun log disponibile.</div>}
+                </div>
+              </div>
             </div>
 
             {/* SEZIONE GESTIONE FONDI TASSE */}
             {dbBackupInfo && dbBackupInfo.funds && (
-            <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md mb-6 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+              <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md mb-6 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
                 <h3 className="text-lg font-bold text-white mb-2 border-b border-emerald-900/50 pb-2 flex items-center"><Landmark className="w-5 h-5 mr-2 text-emerald-500"/> Gestione Fondi Tassazione (Escluse Crypto)</h3>
                 <p className="text-xs text-slate-400 mb-6">Le tasse variano dal 26% al 55%. Lo Stato incassa il grosso, le aziende si dividono un 6% proporzionale.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
-                        <div>
-                            <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
-                            <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
-                        </div>
-                        <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">Preleva</button>
+                  <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
+                    <div>
+                      <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
+                      <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
                     </div>
-                    
-                    <div className="bg-nebula-950 p-4 rounded-lg border border-cyan-500/30">
-                        <div className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider mb-3">Fondi Aziendali (Da erogare)</div>
-                        <div className="space-y-2 max-h-32 overflow-y-auto custom-scroll pr-2">
-                            {Object.entries(dbBackupInfo.funds.companies).map(([ticker, amount]) => amount > 0 && (
-                                <div key={ticker} className="flex justify-between items-center text-sm border-b border-nebula-border/50 pb-2">
-                                    <span className="font-bold text-white">{ticker}</span>
-                                    <div className="flex items-center space-x-3">
-                                        <span className="font-mono text-slate-300">{formatCurrency(amount)}</span>
-                                        <button onClick={() => socket.emit('admin_withdraw_fund', { target: ticker })} className="px-2 py-1 bg-cyan-600/30 text-cyan-400 hover:bg-cyan-600/50 text-[10px] rounded">Preleva</button>
-                                    </div>
-                                </div>
-                            ))}
-                            {Object.values(dbBackupInfo.funds.companies).every(v => v === 0) && <div className="text-xs text-slate-500">Nessun fondo aziendale accumulato.</div>}
+                    <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">Preleva</button>
+                  </div>
+                  
+                  <div className="bg-nebula-950 p-4 rounded-lg border border-cyan-500/30">
+                    <div className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider mb-3">Fondi Aziendali (Da erogare)</div>
+                    <div className="space-y-2 max-h-32 overflow-y-auto custom-scroll pr-2">
+                      {Object.entries(dbBackupInfo.funds.companies).map(([ticker, amount]) => amount > 0 && (
+                        <div key={ticker} className="flex justify-between items-center text-sm border-b border-nebula-border/50 pb-2">
+                          <span className="font-bold text-white">{ticker}</span>
+                          <div className="flex items-center space-x-3">
+                            <span className="font-mono text-slate-300">{formatCurrency(amount)}</span>
+                            <button onClick={() => socket.emit('admin_withdraw_fund', { target: ticker })} className="px-2 py-1 bg-cyan-600/30 text-cyan-400 hover:bg-cyan-600/50 text-[10px] rounded">Preleva</button>
+                          </div>
                         </div>
+                      ))}
+                      {Object.values(dbBackupInfo.funds.companies).every(v => v === 0) && <div className="text-xs text-slate-500">Nessun fondo aziendale accumulato.</div>}
                     </div>
+                  </div>
                 </div>
-            </div>
+              </div>
             )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -796,8 +819,8 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   <button onClick={() => {
-                      if(document.getElementById('adm-prc').value) socket.emit('admin_action', { type: 'price', ticker: adminPriceEdit.ticker, price: parseFloat(document.getElementById('adm-prc').value) });
-                      if(adminPriceEdit.vol) socket.emit('admin_action', { type: 'edit_asset', ticker: adminPriceEdit.ticker, updates: { vol: adminPriceEdit.vol } });
+                    if(document.getElementById('adm-prc').value) socket.emit('admin_action', { type: 'price', ticker: adminPriceEdit.ticker, price: parseFloat(document.getElementById('adm-prc').value) });
+                    if(adminPriceEdit.vol) socket.emit('admin_action', { type: 'edit_asset', ticker: adminPriceEdit.ticker, updates: { vol: adminPriceEdit.vol } });
                   }} className="col-span-2 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-xs">Aggiorna Asset</button>
                   <button onClick={() => socket.emit('admin_action', { type: 'reset_chart', ticker: adminPriceEdit.ticker })} className="col-span-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded text-xs flex items-center justify-center"><RefreshCw className="w-3 h-3 mr-1"/> Reset</button>
                   <button onClick={() => { if(window.confirm('Cancellare asset e rubare soldi agli utenti?')) socket.emit('admin_action', { type: 'delete_asset', ticker: adminPriceEdit.ticker })}} className="col-span-1 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded text-xs flex items-center justify-center"><Trash2 className="w-3 h-3 mr-1"/> Elimina</button>
@@ -950,12 +973,12 @@ export default function App() {
               <h3 className="text-xl font-bold text-white">Deposita Fondi</h3>
             </div>
             <div className="space-y-4 text-sm text-slate-300">
-                <p className="font-bold text-emerald-400">Segui questi step su Discord per aggiungere fondi:</p>
-                <ol className="list-decimal list-inside space-y-2">
-                    <li>Vai nel canale <span className="font-mono bg-nebula-950 px-1 rounded">#cmd</span> su Urban RP.</li>
-                    <li>Invia il comando <span className="font-mono text-cyan-400 bg-nebula-950 px-1 rounded">/bonifico</span> inviando la somma che vuoi depositare a <strong>@NebulaStocks</strong>.</li>
-                    <li>Attendi che lo staff approvi e accrediti la somma sul tuo terminale.</li>
-                </ol>
+              <p className="font-bold text-emerald-400">Segui questi step su Discord per aggiungere fondi:</p>
+              <ol className="list-decimal list-inside space-y-2">
+                <li>Vai nel canale <span className="font-mono bg-nebula-950 px-1 rounded">#cmd</span> su Urban RP.</li>
+                <li>Invia il comando <span className="font-mono text-cyan-400 bg-nebula-950 px-1 rounded">/bonifico</span> inviando la somma che vuoi depositare a <strong>@NebulaStocks</strong>.</li>
+                <li>Attendi che lo staff approvi e accrediti la somma sul tuo terminale.</li>
+              </ol>
             </div>
           </div>
         </div>
@@ -972,13 +995,13 @@ export default function App() {
             {discordModal.type === 'WITHDRAW' ? (
               <>
                 <div className="text-xs text-slate-400 mb-4 text-center">
-                    <p className="mb-2">Prelievo Minimo: 100€ <br/><span className="text-emerald-400">Prelievi oggi: {user.withdrawalsToday || 0} / {dailyWithdrawalsAllowed}</span></p>
-                    <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3">
-                        <span>100€ - 5.000€</span><span className="text-right text-rose-400">Tassa 26%</span>
-                        <span>5.000€ - 25.000€</span><span className="text-right text-rose-400">Tassa 35%</span>
-                        <span>25.000€ - 50.000€</span><span className="text-right text-rose-400">Tassa 40%</span>
-                        <span>Oltre 50.000€</span><span className="text-right text-rose-400">Tassa 55%</span>
-                    </div>
+                  <p className="mb-2">Prelievo Minimo: 100€ <br/><span className="text-emerald-400">Prelievi oggi: {user.withdrawalsToday || 0} / {dailyWithdrawalsAllowed}</span></p>
+                  <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3">
+                    <span>100€ - 5.000€</span><span className="text-right text-rose-400">Tassa 26%</span>
+                    <span>5.000€ - 25.000€</span><span className="text-right text-rose-400">Tassa 35%</span>
+                    <span>25.000€ - 50.000€</span><span className="text-right text-rose-400">Tassa 40%</span>
+                    <span>Oltre 50.000€</span><span className="text-right text-rose-400">Tassa 55%</span>
+                  </div>
                 </div>
                 <input type="number" id="dm-amount" defaultValue="100" min="100" step="any" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500" />
                 <button onClick={requestWithdrawal} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold transition-colors">Genera Chiave di Prelievo</button>
@@ -987,9 +1010,9 @@ export default function App() {
               <div className="text-center">
                 <p className="text-sm text-emerald-400 mb-4 font-bold">Richiesta elaborata.</p>
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono mb-4 text-slate-300">
-                    <span className="text-left">Prelievo Lordo:</span> <span className="text-right">{formatCurrency(discordModal.netAmount + discordModal.taxAmount)}</span>
-                    <span className="text-left text-rose-400">Tasse (-{(discordModal.rate * 100).toFixed(0)}%):</span> <span className="text-right text-rose-400">-{formatCurrency(discordModal.taxAmount)}</span>
-                    <span className="text-left font-bold text-white border-t border-nebula-border pt-1">Importo Netto:</span> <span className="text-right font-bold text-emerald-400 border-t border-nebula-border pt-1">{formatCurrency(discordModal.netAmount)}</span>
+                  <span className="text-left">Prelievo Lordo:</span> <span className="text-right">{formatCurrency(discordModal.netAmount + discordModal.taxAmount)}</span>
+                  <span className="text-left text-rose-400">Tasse (-{(discordModal.rate * 100).toFixed(0)}%):</span> <span className="text-right text-rose-400">-{formatCurrency(discordModal.taxAmount)}</span>
+                  <span className="text-left font-bold text-white border-t border-nebula-border pt-1">Importo Netto:</span> <span className="text-right font-bold text-emerald-400 border-t border-nebula-border pt-1">{formatCurrency(discordModal.netAmount)}</span>
                 </div>
                 <div className="bg-black border border-nebula-border p-4 rounded-xl mb-4">
                   <p className="text-xs text-slate-500 mb-1">La tua Chiave di Prelievo:</p>
