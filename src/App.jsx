@@ -48,6 +48,7 @@ export default function App() {
 
   const marketCanvasRef = useRef(null);
   const chatScrollRef = useRef(null);
+  const downloadRequestedRef = useRef(false); // NUOVO: Blocca il download automatico
 
   useEffect(() => {
     const handleResize = () => setResizeTrigger(r => r + 1);
@@ -104,14 +105,20 @@ export default function App() {
     });
 
     socket.on('admin_db_data', (data) => {
-      setDbBackupInfo(data); // Salva i dati localmente per la UI fondi
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `nebula_backup_${new Date().toISOString().split('T')[0]}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      setDbBackupInfo(data); // Aggiorna i dati per i Fondi nell'interfaccia
+      
+      // Esegue il download SOLO se è stato richiesto manualmente
+      if (downloadRequestedRef.current) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `nebula_backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        downloadRequestedRef.current = false; // Resetta il trigger
+      }
     });
 
     socket.on('chat_update', ({ room, chat }) => {
@@ -466,7 +473,7 @@ export default function App() {
                       <div className="mb-4"><input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500" /></div>
                       <div className="flex justify-between items-center font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50"><span className="text-slate-400">Controvalore:</span><span className="font-bold text-white">{formatCurrency((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
                       <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => executeOrder('BUY')} className="py-3 bg-emerald-600 hover:bg-emerald-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Compra</button>
+                        <button onClick={() => executeOrder('BUY')} className="py-3 bg-emerald-600 hover:bg-emerald-50 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Compra</button>
                         <button onClick={() => executeOrder('SELL')} className="py-3 bg-rose-600 hover:bg-rose-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Vendi</button>
                       </div>
                     </div>
@@ -693,7 +700,7 @@ export default function App() {
               <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> Salvataggio e Ripristino Dati (Backup)</h3>
               <p className="text-xs text-slate-400 mb-4">Usa queste funzioni prima e dopo aver riavviato/aggiornato il backend su Render per non perdere i soldi degli utenti.</p>
               <div className="flex space-x-4">
-                <button onClick={() => socket.emit('admin_fetch_db')} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-sm flex items-center justify-center"><Download className="w-4 h-4 mr-2"/> 1. Scarica Dati</button>
+                <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-sm flex items-center justify-center"><Download className="w-4 h-4 mr-2"/> 1. Scarica Dati</button>
                 <label className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-sm flex items-center justify-center cursor-pointer">
                   <Upload className="w-4 h-4 mr-2"/> 2. Ripristina Dati
                   <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
