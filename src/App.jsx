@@ -10,7 +10,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND
-const BACKEND_URL = "https://concluded-forgot-encoding-prisoner.trycloudflare.com"; 
+const BACKEND_URL = "https://wav-breakdown-exhibitions-donor.trycloudflare.com"; 
 
 let socket;
 
