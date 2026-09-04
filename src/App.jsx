@@ -4,12 +4,13 @@ import {
   Crown, Factory, Coins, Globe, Plus, Send, X, Check, 
   LineChart, Store, Clock, Users, Building, Percent, Search,
   LogOut, Image, Zap, Trash2, RefreshCw, Key, Download, Upload,
-  Bell, Landmark, ArrowRightCircle, AlertTriangle, ScrollText
+  Bell, Landmark, ArrowRightCircle, AlertTriangle, ScrollText, ChevronDown
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
-const BACKEND_URL = "https://wav-breakdown-exhibitions-donor.trycloudflare.com"; 
+// METTI QUI IL LINK DEL TUO BACKEND
+const BACKEND_URL = "https://skirts-width-prints-campus.trycloudflare.com"; 
 
 let socket;
 
@@ -35,6 +36,7 @@ export default function App() {
   const [adminValidator, setAdminValidator] = useState(null);
   const [dbBackupInfo, setDbBackupInfo] = useState(null);
   const [adminLogs, setAdminLogs] = useState([]);
+  const [showLogs, setShowLogs] = useState(false);
 
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '', vol: '' });
@@ -550,7 +552,7 @@ export default function App() {
                         <td className="p-4 font-bold text-white flex items-center space-x-2"><span>{asset.ticker}</span></td><td className="p-4">{h.shares}</td><td className="p-4 text-slate-400">{formatCurrency(h.avgPrice)}</td><td className="p-4 text-white">{formatCurrency(asset.currentPrice)}</td>
                         <td className={`p-4 font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</td>
                         <td className="p-4 text-right"><button onClick={() => {
-                          socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
+                             socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
                         }} className="text-xs bg-rose-600/20 text-rose-400 px-3 py-1 rounded hover:bg-rose-600/40">Vendi Tutto</button></td>
                       </tr>
                     );
@@ -753,15 +755,34 @@ export default function App() {
                 </div>
               </div>
 
+              {/* TENDINA LOG */}
               <div className="bg-nebula-900/60 p-6 border border-slate-700 rounded-xl backdrop-blur-md flex flex-col">
-                <div className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2">
-                  <h3 className="text-lg font-bold text-white flex items-center"><ScrollText className="w-5 h-5 mr-2 text-slate-400"/> Registro Eventi / Log</h3>
-                  <button onClick={handleDownloadLogs} className="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-1 rounded text-white flex items-center"><Download className="w-3 h-3 mr-1"/> Scarica .txt</button>
+                <div 
+                  className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2 cursor-pointer group" 
+                  onClick={() => setShowLogs(!showLogs)}
+                >
+                  <h3 className="text-lg font-bold text-white flex items-center group-hover:text-cyan-400 transition-colors">
+                    <ScrollText className="w-5 h-5 mr-2 text-slate-400 group-hover:text-cyan-400 transition-colors"/> 
+                    Registro Eventi / Log
+                    <span className="ml-3 px-2 py-1 bg-slate-800 text-[10px] rounded text-slate-300">{showLogs ? 'Nascondi' : 'Mostra'} <ChevronDown className={`inline w-3 h-3 transition-transform ${showLogs ? 'rotate-180' : ''}`} /></span>
+                  </h3>
+                  <button onClick={(e) => { e.stopPropagation(); handleDownloadLogs(); }} className="bg-slate-700 hover:bg-cyan-600 transition-colors text-xs px-3 py-2 rounded text-white flex items-center shadow"><Download className="w-3 h-3 mr-1"/> .txt</button>
                 </div>
-                <div className="flex-1 bg-black/50 border border-nebula-border rounded p-2 overflow-y-auto font-mono text-[10px] text-slate-300 h-32 custom-scroll">
-                  {adminLogs.map((log, i) => <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>)}
-                  {adminLogs.length === 0 && <div className="text-slate-600">Nessun log disponibile.</div>}
-                </div>
+                {showLogs && (
+                  <div className="flex-1 bg-black/60 border border-nebula-border rounded p-3 overflow-y-auto font-mono text-[11px] text-slate-300 h-64 max-h-64 custom-scroll mt-2 shadow-inner">
+                    {adminLogs.map((log, i) => {
+                        let colorClass = "text-slate-300";
+                        if (log.includes("[ACQUISTO]")) colorClass = "text-amber-300";
+                        if (log.includes("[VENDITA]")) colorClass = "text-emerald-300";
+                        if (log.includes("[PRELIEVO]")) colorClass = "text-cyan-300";
+                        if (log.includes("[SISTEMA]") || log.includes("[MANIPOLAZIONE]")) colorClass = "text-purple-300";
+                        if (log.includes("P&L: -")) colorClass = "text-rose-400"; // Evidenzia perdite in rosso
+                        
+                        return <div key={i} className={`mb-1.5 border-b border-slate-800/50 pb-1.5 ${colorClass}`}>{log}</div>;
+                    })}
+                    {adminLogs.length === 0 && <div className="text-slate-600 italic">Nessun log disponibile.</div>}
+                  </div>
+                )}
               </div>
             </div>
 
