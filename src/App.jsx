@@ -4,28 +4,33 @@ import {
   Crown, Factory, Coins, Globe, Plus, Send, X, Check, 
   LineChart, Store, Clock, Users, Building, Percent, Search,
   LogOut, Image, Zap, Trash2, RefreshCw, Key, Download, Upload,
-  Bell, Landmark, ArrowRightCircle, AlertTriangle, ScrollText, ChevronDown
+  Bell, Landmark, ArrowRightCircle, AlertTriangle, ScrollText, ChevronDown,
+  TrendingUp, TrendingDown, Target, ShieldAlert
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND
-const BACKEND_URL = "https://skirts-width-prints-campus.trycloudflare.com"; 
+const BACKEND_URL = "https://wav-breakdown-exhibitions-donor.trycloudflare.com"; 
 
 let socket;
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
-  const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, bgImage: '', isAdmin: false, withdrawalsToday: 0 });
+  const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', isPro: false, isProMax: false, bgImage: '', isAdmin: false, withdrawalsToday: 0, limitOrders: [], loan: 0 });
   const [portfolio, setPortfolio] = useState({ cash: 100, holdings: {} }); 
   
   const [assets, setAssets] = useState({});
   const [gameTime, setGameTime] = useState({ day: 1, hours: 9, minutes: 0, isExtraordinary: false });
+  const [marketNews, setMarketNews] = useState([]);
   const [chatHistory, setChatHistory] = useState({ global: [] });
   const [dmRooms, setDmRooms] = useState([]);
   
-  const [ui, setUi] = useState({ activeTab: 'markets', activeMarketType: 'stocks', activeAsset: 'SNEB', chartType: 'candle', chartZoom: 60, activeChatRoom: 'global' });
+  const [ui, setUi] = useState({ activeTab: 'markets', activeMarketType: 'stocks', activeAsset: 'SNEB', chartType: 'candle', chartZoom: 60, activeChatRoom: 'global', orderType: 'live' });
   const [tradeQty, setTradeQty] = useState(1);
+  const [limitPrice, setLimitPrice] = useState('');
+  const [limitType, setLimitType] = useState('BUY');
+
   const [chatInput, setChatInput] = useState('');
   const [toasts, setToasts] = useState([]);
   const [resizeTrigger, setResizeTrigger] = useState(0);
@@ -33,20 +38,20 @@ export default function App() {
   
   const [discordModal, setDiscordModal] = useState({ open: false, type: '', code: '', netAmount: 0, taxAmount: 0, rate: 0 });
   const [depositModal, setDepositModal] = useState(false);
+  
+  // Admin States
   const [adminValidator, setAdminValidator] = useState(null);
   const [dbBackupInfo, setDbBackupInfo] = useState(null);
   const [adminLogs, setAdminLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
-
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '', vol: '' });
   const [adminCodeInput, setAdminCodeInput] = useState("");
   const [adminUserQuery, setAdminUserQuery] = useState("");
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
-  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
+  const [adminNews, setAdminNews] = useState({ msg: '', isBull: true });
   
   const [priceAlerts, setPriceAlerts] = useState([]);
-  const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
 
   const marketCanvasRef = useRef(null);
   const chatScrollRef = useRef(null);
@@ -59,9 +64,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    socket = io(BACKEND_URL, {
-      extraHeaders: { "ngrok-skip-browser-warning": "true" }
-    });
+    socket = io(BACKEND_URL, { extraHeaders: { "ngrok-skip-browser-warning": "true" } });
 
     socket.on('market_init', (data) => {
       setAssets(data.assets || {});
@@ -72,6 +75,10 @@ export default function App() {
     socket.on('market_update', (data) => {
       setAssets(data.assets || {});
       setGameTime(data.gameTime || { day: 1, hours: 9, minutes: 0, isExtraordinary: false });
+    });
+
+    socket.on('market_news', (newsArray) => {
+        setMarketNews(newsArray);
     });
 
     socket.on('account_update', (acc) => {
@@ -97,77 +104,42 @@ export default function App() {
     });
 
     socket.on('admin_user_data', (data) => {
-      if(data) {
-        setAdminFetchedUser(data);
-        showToast("Dati utente recuperati", "success");
-      } else {
-        setAdminFetchedUser(null);
-        showToast("Utente non trovato", "error");
-      }
+      if(data) { setAdminFetchedUser(data); showToast("Dati utente recuperati", "success"); } 
+      else { setAdminFetchedUser(null); showToast("Utente non trovato", "error"); }
     });
 
     socket.on('admin_db_data', (data) => {
       setDbBackupInfo(data); 
       if (downloadRequestedRef.current) {
         const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
         a.download = `nebula_backup_${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        downloadRequestedRef.current = false; 
+        a.click(); URL.revokeObjectURL(url); downloadRequestedRef.current = false; 
       }
     });
     
-    socket.on('admin_logs_data', (logs) => {
-      setAdminLogs(logs.reverse());
-    });
-
-    socket.on('chat_update', ({ room, chat }) => {
-      setChatHistory(prev => ({ ...prev, [room]: chat }));
-    });
-
+    socket.on('admin_logs_data', (logs) => { setAdminLogs(logs.reverse()); });
+    socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
-
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
       setDiscordModal({ open: true, type: 'WITHDRAW_SUCCESS', code, netAmount, taxAmount, rate });
     });
 
-    socket.on('admin_code_result', ({ valid, data, special }) => {
+    socket.on('admin_code_result', ({ valid, data, special, isRedeemed }) => {
       if(valid) {
         if (special) setDiscordModal({ open: true, type: 'FUND_WITHDRAWAL', code: special, netAmount: data.amount });
-        else setAdminValidator(data);
+        else setAdminValidator({ ...data, isRedeemed });
       }
     });
 
-    const hash = window.location.hash.substring(1);
-    const hashParams = new URLSearchParams(hash);
-    const accessToken = hashParams.get('access_token');
-
+    const hash = window.location.hash.substring(1); const hashParams = new URLSearchParams(hash); const accessToken = hashParams.get('access_token');
     if (accessToken) {
       window.history.replaceState({}, document.title, window.location.pathname);
       fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${accessToken}` } })
-      .then(res => res.json()).then(u => {
-        if (u.id) socket.emit('user_login', { id: u.id, name: u.username, avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : '' });
-      });
+      .then(res => res.json()).then(u => { if (u.id) socket.emit('user_login', { id: u.id, name: u.username, avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : '' }); });
     }
-
     return () => socket.disconnect();
   }, []);
-
-  useEffect(() => {
-    if (Object.keys(assets).length === 0 || !user.isPro) return;
-    priceAlerts.forEach(alert => {
-      if (!alert.triggered && assets[alert.ticker] && assets[alert.ticker].currentPrice >= alert.target) {
-        const audioUrl = alert.mp3 && alert.mp3.trim() !== '' ? alert.mp3 : "https://actions.google.com/sounds/v1/alarms/beep_short.ogg";
-        const audio = new Audio(audioUrl);
-        audio.play().catch(() => console.log("Audio bloccato dal browser"));
-        showToast(`🚨 ALERT: ${alert.ticker} ha raggiunto il target!`, "success");
-        setPriceAlerts(prev => prev.map(a => a.id === alert.id ? {...a, triggered: true} : a));
-      }
-    });
-  }, [assets, priceAlerts, user.isPro]);
 
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
@@ -186,19 +158,18 @@ export default function App() {
     return '€' + Number(num || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const executeOrder = (type) => {
-    socket.emit('execute_trade', { userId: user.id, type, ticker: ui.activeAsset, qty: parseFloat(tradeQty) });
+  const executeOrder = (type) => { socket.emit('execute_trade', { userId: user.id, type, ticker: ui.activeAsset, qty: parseFloat(tradeQty) }); };
+  const placeLimitOrder = () => {
+      if(!limitPrice || parseFloat(limitPrice) <= 0) return showToast("Inserisci un prezzo valido", "error");
+      socket.emit('place_limit_order', { userId: user.id, type: limitType, ticker: ui.activeAsset, qty: parseFloat(tradeQty), targetPrice: parseFloat(limitPrice) });
   };
+  const cancelLimitOrder = (orderId) => { socket.emit('cancel_limit_order', { userId: user.id, orderId }); };
 
-  const buyTier = (tier, price) => {
-    socket.emit('buy_tier', { userId: user.id, tier, price });
-  };
-
+  const buyTier = (tier, price) => { socket.emit('buy_tier', { userId: user.id, tier, price }); };
   const sendMessage = (e) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    const msgObj = { sender: user.name, avatar: user.avatar, text: chatInput, color: user.colorName, textCol: user.colorText, time: new Date().toLocaleTimeString().slice(0,5) };
-    socket.emit('send_message', { room: ui.activeChatRoom, msg: msgObj });
+    socket.emit('send_message', { room: ui.activeChatRoom, msg: { sender: user.name, avatar: user.avatar, text: chatInput, color: user.colorName, textCol: user.colorText, time: new Date().toLocaleTimeString().slice(0,5) } });
     setChatInput('');
   };
 
@@ -218,30 +189,16 @@ export default function App() {
   };
 
   const handleDownloadLogs = () => {
-    const text = adminLogs.join('\n');
-    const blob = new Blob([text], {type: 'text/plain'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const text = adminLogs.join('\n'); const blob = new Blob([text], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
     a.download = `nebula_logs_${new Date().toISOString().split('T')[0]}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    a.click(); URL.revokeObjectURL(url);
   };
 
   const handleRestoreDb = (e) => {
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const json = JSON.parse(evt.target.result);
-        socket.emit('admin_restore_db', json);
-      } catch(err) {
-        showToast("File JSON non valido", "error");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = ''; 
+    const file = e.target.files[0]; if(!file) return; const reader = new FileReader();
+    reader.onload = (evt) => { try { socket.emit('admin_restore_db', JSON.parse(evt.target.result)); } catch(err) { showToast("File JSON non valido", "error"); } };
+    reader.readAsText(file); e.target.value = ''; 
   };
 
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
@@ -255,47 +212,31 @@ export default function App() {
     if (newVal > tierLimit) {
       let overLimitVal = newVal - tierLimit;
       if (currentVal >= tierLimit) overLimitVal = parseFloat(tradeQty || 0) * activeAssetObj.currentPrice;
-      let overShares = overLimitVal / activeAssetObj.currentPrice;
-      dynamicFee = overShares * 0.50;
+      dynamicFee = (overLimitVal / activeAssetObj.currentPrice) * 0.50;
     }
   }
 
   useEffect(() => {
     if (!activeAssetObj || ui.activeTab !== 'markets') return;
-    const canvas = marketCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.parentElement.getBoundingClientRect();
-    if(rect.width === 0 || rect.height === 0) return;
+    const canvas = marketCanvasRef.current; if (!canvas) return;
+    const rect = canvas.parentElement.getBoundingClientRect(); if(rect.width === 0 || rect.height === 0) return;
 
-    const ctx = canvas.getContext('2d');
-    canvas.width = rect.width; 
-    canvas.height = rect.height;
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    
-    const data = activeAssetObj.history ? activeAssetObj.history.slice(-ui.chartZoom) : [];
-    if(data.length === 0) return; 
+    const ctx = canvas.getContext('2d'); canvas.width = rect.width; canvas.height = rect.height; ctx.clearRect(0, 0, rect.width, rect.height);
+    const data = activeAssetObj.history ? activeAssetObj.history.slice(-ui.chartZoom) : []; if(data.length === 0) return; 
 
     let minP = Math.min(...data.map(d => d.low)), maxP = Math.max(...data.map(d => d.high));
-    const range = (maxP - minP) || 1; minP -= range * 0.1; maxP += range * 0.1;
-    const finalRange = maxP - minP || 1;
+    const range = (maxP - minP) || 1; minP -= range * 0.1; maxP += range * 0.1; const finalRange = maxP - minP || 1;
+    const plotW = rect.width - 70; const plotH = rect.height - 40; const stepX = plotW / Math.max(1, (data.length - 1));
     
-    const plotW = rect.width - 70;
-    const plotH = rect.height - 40; 
-    const stepX = plotW / Math.max(1, (data.length - 1));
-    
-    ctx.fillStyle = '#475569'; 
-    ctx.font = '10px monospace';
+    ctx.fillStyle = '#475569'; ctx.font = '10px monospace';
     for(let i=0; i<=4; i++) ctx.fillText(formatCurrency(maxP - (finalRange/4)*i, true), rect.width - 65, 20 + (plotH/4)*i + 4);
 
     if (ui.chartType === 'candle') {
       const candleWidth = Math.max(2, (plotW / data.length) * 0.7);
       data.forEach((d, i) => {
         const x = 10 + (i * stepX);
-        const yO = 20 + plotH - ((d.open - minP) / finalRange) * plotH;
-        const yC = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
-        const yH = 20 + plotH - ((d.high - minP) / finalRange) * plotH;
-        const yL = 20 + plotH - ((d.low - minP) / finalRange) * plotH;
-        
+        const yO = 20 + plotH - ((d.open - minP) / finalRange) * plotH, yC = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
+        const yH = 20 + plotH - ((d.high - minP) / finalRange) * plotH, yL = 20 + plotH - ((d.low - minP) / finalRange) * plotH;
         ctx.strokeStyle = ctx.fillStyle = d.close >= d.open ? '#10b981' : '#f43f5e';
         ctx.beginPath(); ctx.lineWidth = 1; ctx.moveTo(x, yH); ctx.lineTo(x, yL); ctx.stroke();
         ctx.fillRect(x - candleWidth/2, Math.min(yO, yC), candleWidth, Math.max(1, Math.abs(yO - yC)));
@@ -303,8 +244,7 @@ export default function App() {
     } else {
       ctx.beginPath(); ctx.strokeStyle = '#06b6d4'; ctx.lineWidth = 2;
       data.forEach((d, i) => {
-        const x = 10 + (i * stepX);
-        const yC = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
+        const x = 10 + (i * stepX); const yC = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
         if (i === 0) ctx.moveTo(x, yC); else ctx.lineTo(x, yC);
       });
       ctx.stroke();
@@ -313,19 +253,13 @@ export default function App() {
     if (mousePos && data.length > 0) {
       let index = Math.round((mousePos.x - 10) / stepX);
       if (index >= 0 && index < data.length) {
-        const d = data[index];
-        const cx = 10 + (index * stepX);
-        const cy = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
-
+        const d = data[index]; const cx = 10 + (index * stepX); const cy = 20 + plotH - ((d.close - minP) / finalRange) * plotH;
         ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, rect.height); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(rect.width, cy); ctx.stroke(); ctx.setLineDash([]);
 
-        const priceStr = formatCurrency(d.close);
-        ctx.font = 'bold 11px monospace'; const textWidth = ctx.measureText(priceStr).width;
-        let ttX = cx + 15; if (ttX + textWidth + 20 > rect.width) ttX = cx - textWidth - 25; 
-        let ttY = cy - 30; if (ttY < 0) ttY = cy + 15;
-
+        const priceStr = formatCurrency(d.close); ctx.font = 'bold 11px monospace'; const textWidth = ctx.measureText(priceStr).width;
+        let ttX = cx + 15; if (ttX + textWidth + 20 > rect.width) ttX = cx - textWidth - 25; let ttY = cy - 30; if (ttY < 0) ttY = cy + 15;
         ctx.fillStyle = '#0f172a'; ctx.fillRect(ttX, ttY, textWidth + 20, 26);
         ctx.strokeStyle = '#38bdf8'; ctx.strokeRect(ttX, ttY, textWidth + 20, 26);
         ctx.fillStyle = '#ffffff'; ctx.fillText(priceStr, ttX + 10, ttY + 17);
@@ -343,16 +277,18 @@ export default function App() {
           <button onClick={() => window.location.href = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=identify`} className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium py-3 px-4 rounded-xl transition-all shadow-lg">
             <MessageCircle className="w-5 h-5" /><span>Accedi con Discord</span>
           </button>
+          {/* AVVISO INATTIVITA' */}
+          <div className="mt-6 border border-rose-500/50 bg-rose-900/20 rounded-lg p-3">
+              <p className="text-rose-500 font-bold text-xs uppercase flex items-center justify-center animate-pulse"><AlertTriangle className="w-4 h-4 mr-2"/> Avviso di Manutenzione</p>
+              <p className="text-[10px] text-rose-300 mt-1">Dal 6 al 13 Settembre il sito sarà inattivo per manutenzione dei server.</p>
+          </div>
         </div>
       </div>
     );
   }
 
   let totalStockVal = 0;
-  if(portfolio.holdings && assets) {
-    Object.keys(portfolio.holdings).forEach(t => { if(assets[t]) totalStockVal += portfolio.holdings[t].shares * assets[t].currentPrice; });
-  }
-
+  if(portfolio.holdings && assets) { Object.keys(portfolio.holdings).forEach(t => { if(assets[t]) totalStockVal += portfolio.holdings[t].shares * assets[t].currentPrice; }); }
   const dailyWithdrawalsAllowed = user.isProMax ? 8 : (user.isPro ? 5 : 3);
 
   return (
@@ -390,12 +326,29 @@ export default function App() {
         </div>
       </header>
 
+      {/* TICKER NEWS */}
+      {marketNews.length > 0 && (
+          <div className="h-8 bg-black/80 border-b border-nebula-border flex items-center overflow-hidden shrink-0 z-10 px-4">
+              <div className="font-bold text-cyan-500 text-[10px] uppercase tracking-widest mr-4 shrink-0 flex items-center bg-black z-20 shadow-[10px_0_10px_black]"><Globe className="w-3 h-3 mr-1"/> Market Movers</div>
+              <div className="flex space-x-8 whitespace-nowrap animate-[marquee_20s_linear_infinite] opacity-80 text-xs">
+                  {marketNews.map((n) => (
+                      <span key={n.id} className="flex items-center space-x-2">
+                          <span className="text-slate-500">[{n.time}]</span>
+                          {n.type === 'bull' ? <TrendingUp className="w-3 h-3 text-emerald-400"/> : <TrendingDown className="w-3 h-3 text-rose-400"/>}
+                          <span className={n.type === 'bull' ? 'text-emerald-100' : 'text-rose-100'}>{n.msg}</span>
+                          <span className="text-nebula-700 mx-4">|</span>
+                      </span>
+                  ))}
+              </div>
+          </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden z-10">
         <nav className="w-16 md:w-64 bg-nebula-900/95 border-r border-nebula-border flex flex-col justify-between shrink-0 backdrop-blur-md">
           <div className="py-4 flex flex-col space-y-1">
             {[
               { id: 'markets', icon: LineChart, label: 'Trading Desk' }, 
-              { id: 'portfolio', icon: Wallet, label: 'Portafoglio' }, 
+              { id: 'portfolio', icon: Wallet, label: 'Portafoglio & Banca' }, 
               { id: 'chat', icon: MessageCircle, label: 'Comunicazioni' }, 
               { id: 'premium', icon: Crown, label: 'Abbonamenti' },
               { id: 'settings', icon: Settings, label: 'Impostazioni' }
@@ -456,13 +409,6 @@ export default function App() {
                         <span className="text-slate-400 flex items-center"><Coins className="w-3 h-3 mr-1 text-slate-500"/>Cap: <span className="font-mono ml-1 text-slate-300">{activeAssetObj.mcap}</span></span>
                       </div>
                       <div className="mt-2 text-xs text-slate-400 max-w-xl">{activeAssetObj.desc}</div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-xs border-t border-nebula-border/50 pt-4">
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1"/> CEO</span><span className="font-semibold text-slate-200 truncate">{activeAssetObj.extra?.ceo}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Building className="w-3 h-3 mr-1"/> Fondazione</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.founded}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Users className="w-3 h-3 mr-1"/> Dipendenti</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.employees}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Percent className="w-3 h-3 mr-1"/> Dividendo</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.dividend}</span></div>
-                      </div>
                     </div>
                     <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
                   </div>
@@ -489,7 +435,7 @@ export default function App() {
                   </div>
                   
                   <div className="p-4 md:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 bg-nebula-950/40 flex-1">
-                    <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm">
+                    <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border relative overflow-hidden backdrop-blur-sm flex flex-col">
                       {(!activeAssetObj.type.includes('promax') && !isMarketOpen) && (
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-rose-500 mb-2" /><span className="text-rose-400 font-bold">Mercato Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura: 08:00 - 19:30</span></div>
                       )}
@@ -497,32 +443,72 @@ export default function App() {
                         <div className="absolute inset-0 bg-nebula-950/90 z-10 flex flex-col items-center justify-center backdrop-blur-md"><Store className="w-10 h-10 text-purple-500 mb-2" /><span className="text-purple-400 font-bold">Mercato PRO MAX Chiuso</span><span className="text-xs text-slate-400 mt-1">Apertura: 05:00 - 22:00</span></div>
                       )}
                       
+                      <div className="flex border-b border-nebula-border mb-4">
+                          <button onClick={()=>setUi(p=>({...p, orderType:'live'}))} className={`pb-2 flex-1 text-center font-bold text-xs uppercase ${ui.orderType === 'live' ? 'border-b-2 border-cyan-500 text-white' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}>Mercato (Live)</button>
+                          <button onClick={()=>setUi(p=>({...p, orderType:'limit'}))} className={`pb-2 flex-1 text-center font-bold text-xs uppercase ${ui.orderType === 'limit' ? 'border-b-2 border-cyan-500 text-white' : 'text-slate-500 hover:text-slate-300 border-transparent'}`}>Limite (Auto)</button>
+                      </div>
+
                       <div className="flex justify-between items-center mb-4 text-xs font-mono"><span className="text-slate-400 uppercase">Cassa Disponibile:</span><span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span></div>
                       
                       <div className="mb-2 text-[10px] text-slate-400 flex justify-between">
-                        <span>Cap Massimo Esentasse: <span className="font-bold text-slate-300">{formatCurrency(user.isProMax ? 100000 : (user.isPro ? 50000 : 25000))}</span></span>
+                        <span>Cap Esentasse: <span className="font-bold text-slate-300">{formatCurrency(user.isProMax ? 100000 : (user.isPro ? 50000 : 25000))}</span></span>
                         {dynamicFee > 0 && <span className="text-rose-400 font-bold flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Extra Fee applicata</span>}
                       </div>
 
-                      <div className="mb-4"><input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className={`w-full bg-nebula-950/80 border ${dynamicFee > 0 ? 'border-rose-500' : 'border-nebula-border'} rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500`} /></div>
+                      <div className="mb-4 flex space-x-2">
+                          <div className="flex-1">
+                              <label className="text-[10px] text-slate-500 uppercase block mb-1">Quantità</label>
+                              <input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className={`w-full bg-nebula-950/80 border ${dynamicFee > 0 ? 'border-rose-500' : 'border-nebula-border'} rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500`} />
+                          </div>
+                          {ui.orderType === 'limit' && (
+                              <div className="flex-1">
+                                  <label className="text-[10px] text-slate-500 uppercase block mb-1">Prezzo Target (€)</label>
+                                  <input type="number" step="any" placeholder="Es. 150" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} className="w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-cyan-400 text-lg font-bold outline-none focus:border-cyan-500" />
+                              </div>
+                          )}
+                      </div>
                       
                       <div className="flex flex-col space-y-1 font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50">
-                        <div className="flex justify-between items-center"><span className="text-slate-400">Controvalore Azioni:</span><span className="font-bold text-white">{formatCurrency((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice)}</span></div>
-                        {dynamicFee > 0 && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Commissione Extra (Over-Cap):</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
-                        {dynamicFee > 0 && <div className="flex justify-between items-center text-emerald-400 mt-2 border-t border-nebula-border/50 pt-2"><span className="text-xs uppercase font-bold">Totale Ordine:</span><span className="font-bold">{formatCurrency(((parseFloat(tradeQty)||0) * activeAssetObj.currentPrice) + dynamicFee)}</span></div>}
+                        <div className="flex justify-between items-center"><span className="text-slate-400">Valore Stimato:</span><span className="font-bold text-white">{formatCurrency((parseFloat(tradeQty)||0) * (ui.orderType === 'live' ? activeAssetObj.currentPrice : (parseFloat(limitPrice)||0)))}</span></div>
+                        {dynamicFee > 0 && ui.orderType === 'live' && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Commissione Extra:</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4">
-                        <button onClick={() => executeOrder('BUY')} className="py-3 bg-emerald-600 hover:bg-emerald-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Compra</button>
-                        <button onClick={() => executeOrder('SELL')} className="py-3 bg-rose-600 hover:bg-rose-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Vendi</button>
+                      <div className="grid grid-cols-2 gap-4 mt-auto">
+                        {ui.orderType === 'live' ? (
+                            <>
+                                <button onClick={() => executeOrder('BUY')} className="py-3 bg-emerald-600 hover:bg-emerald-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Compra</button>
+                                <button onClick={() => executeOrder('SELL')} className="py-3 bg-rose-600 hover:bg-rose-500 transition-colors text-white rounded-xl font-bold uppercase tracking-wider">Vendi</button>
+                            </>
+                        ) : (
+                            <>
+                                <button onClick={() => { setLimitType('BUY'); placeLimitOrder(); }} className="py-3 border-2 border-emerald-600 text-emerald-400 hover:bg-emerald-600/20 transition-colors rounded-xl font-bold uppercase tracking-wider text-xs">Auto Compra</button>
+                                <button onClick={() => { setLimitType('SELL'); placeLimitOrder(); }} disabled={!user.isPro} title={!user.isPro ? "Solo PRO" : ""} className="py-3 border-2 border-rose-600 text-rose-400 hover:bg-rose-600/20 transition-colors disabled:opacity-30 disabled:hover:bg-transparent rounded-xl font-bold uppercase tracking-wider text-xs">Auto Vendi</button>
+                            </>
+                        )}
                       </div>
                     </div>
-                    <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border backdrop-blur-sm">
+                    
+                    <div className="bg-nebula-900/60 p-5 rounded-xl border border-nebula-border backdrop-blur-sm flex flex-col">
                       <h3 className="text-sm font-semibold text-white mb-4">La tua Posizione</h3>
-                      <div className="space-y-4 font-mono text-sm">
+                      <div className="space-y-4 font-mono text-sm border-b border-nebula-border/50 pb-6 mb-4">
                         <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Asset Posseduti</span><span className="text-white font-bold">{portfolio.holdings[activeAssetObj?.ticker]?.shares || 0}</span></div>
                         <div className="flex justify-between border-b border-nebula-border/50 pb-2"><span className="text-slate-400">Prezzo Medio</span><span className="text-white">{portfolio.holdings[activeAssetObj?.ticker] ? formatCurrency(portfolio.holdings[activeAssetObj.ticker].avgPrice) : '€0.00'}</span></div>
                         <div className="flex justify-between pt-2"><span className="text-slate-400">P&L</span><span className={`font-bold ${portfolio.holdings[activeAssetObj?.ticker] && (activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{portfolio.holdings[activeAssetObj?.ticker] ? formatCurrency((activeAssetObj.currentPrice - portfolio.holdings[activeAssetObj.ticker].avgPrice) * portfolio.holdings[activeAssetObj.ticker].shares) : '€0.00'}</span></div>
+                      </div>
+
+                      {/* LISTA ORDINI PENDENTI (LIMIT) */}
+                      <h3 className="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider flex items-center"><Target className="w-3 h-3 mr-1"/> Ordini Pendenti</h3>
+                      <div className="flex-1 overflow-y-auto custom-scroll space-y-2">
+                          {(user.limitOrders || []).filter(o => o.ticker === activeAssetObj.ticker).map(o => (
+                              <div key={o.id} className="flex items-center justify-between bg-nebula-950 border border-nebula-border p-2 rounded text-xs font-mono">
+                                  <div>
+                                      <span className={`font-bold mr-2 ${o.type === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>{o.type}</span>
+                                      <span className="text-white">{o.qty} pz</span> a <span className="text-cyan-400">{formatCurrency(o.targetPrice)}</span>
+                                  </div>
+                                  <button onClick={() => cancelLimitOrder(o.id)} className="text-slate-500 hover:text-rose-400"><X className="w-4 h-4"/></button>
+                              </div>
+                          ))}
+                          {(user.limitOrders || []).filter(o => o.ticker === activeAssetObj.ticker).length === 0 && <div className="text-[10px] text-slate-500 italic">Nessun ordine automatico.</div>}
                       </div>
                     </div>
                   </div>
@@ -531,7 +517,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB PORTFOLIO */}
+          {/* TAB PORTFOLIO & BANCA */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'portfolio' ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Mio Portafoglio</h2>
@@ -540,25 +526,50 @@ export default function App() {
                 <button onClick={() => setDiscordModal({open: true, type: 'WITHDRAW'})} className="px-4 py-2 bg-nebula-800 border border-nebula-border text-white rounded-lg text-sm font-bold hover:bg-nebula-700 flex items-center"><Landmark className="w-4 h-4 mr-2"/> Preleva Denaro</button>
               </div>
             </div>
-            <div className="bg-nebula-900/60 rounded-xl overflow-hidden border border-nebula-border backdrop-blur-md">
-              <table className="w-full text-left font-mono text-xs md:text-sm">
-                <thead><tr className="bg-nebula-900 border-b border-nebula-border text-slate-400 uppercase"><th className="p-4">Asset</th><th className="p-4">Qty</th><th className="p-4">PMD</th><th className="p-4">Attuale</th><th className="p-4">P&L</th><th className="p-4 text-right">Azione</th></tr></thead>
-                <tbody className="divide-y divide-nebula-border/50 text-slate-200">
-                  {Object.keys(portfolio.holdings || {}).map(ticker => {
-                    const h = portfolio.holdings[ticker], asset = assets[ticker]; if(!asset) return null;
-                    const pnl = (h.shares * asset.currentPrice) - (h.shares * h.avgPrice);
-                    return (
-                      <tr key={ticker} className="hover:bg-nebula-800/50 transition-colors">
-                        <td className="p-4 font-bold text-white flex items-center space-x-2"><span>{asset.ticker}</span></td><td className="p-4">{h.shares}</td><td className="p-4 text-slate-400">{formatCurrency(h.avgPrice)}</td><td className="p-4 text-white">{formatCurrency(asset.currentPrice)}</td>
-                        <td className={`p-4 font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</td>
-                        <td className="p-4 text-right"><button onClick={() => {
-                             socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
-                        }} className="text-xs bg-rose-600/20 text-rose-400 px-3 py-1 rounded hover:bg-rose-600/40">Vendi Tutto</button></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div className="lg:col-span-2 bg-nebula-900/60 rounded-xl overflow-hidden border border-nebula-border backdrop-blur-md">
+                  <table className="w-full text-left font-mono text-xs md:text-sm">
+                    <thead><tr className="bg-nebula-900 border-b border-nebula-border text-slate-400 uppercase"><th className="p-4">Asset</th><th className="p-4">Qty</th><th className="p-4">PMD</th><th className="p-4">Attuale</th><th className="p-4">P&L</th><th className="p-4 text-right">Azione</th></tr></thead>
+                    <tbody className="divide-y divide-nebula-border/50 text-slate-200">
+                      {Object.keys(portfolio.holdings || {}).map(ticker => {
+                        const h = portfolio.holdings[ticker], asset = assets[ticker]; if(!asset) return null;
+                        const pnl = (h.shares * asset.currentPrice) - (h.shares * h.avgPrice);
+                        return (
+                          <tr key={ticker} className="hover:bg-nebula-800/50 transition-colors">
+                            <td className="p-4 font-bold text-white flex items-center space-x-2"><span>{asset.ticker}</span></td><td className="p-4">{h.shares}</td><td className="p-4 text-slate-400">{formatCurrency(h.avgPrice)}</td><td className="p-4 text-white">{formatCurrency(asset.currentPrice)}</td>
+                            <td className={`p-4 font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</td>
+                            <td className="p-4 text-right"><button onClick={() => {
+                                socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
+                            }} className="text-xs bg-rose-600/20 text-rose-400 px-3 py-1 rounded hover:bg-rose-600/40">Vendi Tutto</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* BANCA / PRESTITI */}
+                <div className="bg-nebula-900/60 rounded-xl border border-rose-900/50 p-6 flex flex-col backdrop-blur-md shadow-[0_0_15px_rgba(225,29,72,0.05)]">
+                    <h3 className="text-lg font-bold text-white mb-2 flex items-center border-b border-rose-900/50 pb-2"><Landmark className="w-5 h-5 mr-2 text-rose-500"/> Banca: Linea di Credito</h3>
+                    <p className="text-xs text-slate-400 mb-4">Usa il fido bancario per investire oltre le tue possibilità. <span className="text-rose-400 font-bold">Attenzione ai pignoramenti automatici.</span></p>
+                    
+                    <div className="bg-nebula-950 p-4 rounded-lg border border-nebula-border mb-4">
+                        <div className="text-[10px] uppercase text-slate-500 font-bold mb-1 tracking-wider">Debito Attuale</div>
+                        <div className="text-3xl font-mono font-black text-rose-500">{formatCurrency(user.loan || 0)}</div>
+                    </div>
+
+                    <div className="flex flex-col space-y-2 mt-auto">
+                        <button onClick={() => {
+                            const amt = prompt("Importo da richiedere in prestito:");
+                            if(amt && !isNaN(parseFloat(amt))) socket.emit('take_loan', { userId: user.id, amount: parseFloat(amt) });
+                        }} className="py-3 border-2 border-rose-600/50 hover:bg-rose-600/20 text-rose-400 font-bold text-sm rounded-lg transition-colors">Richiedi Finanziamento</button>
+                        <button onClick={() => {
+                            const amt = prompt("Importo da ripagare:");
+                            if(amt && !isNaN(parseFloat(amt))) socket.emit('repay_loan', { userId: user.id, amount: parseFloat(amt) });
+                        }} disabled={(user.loan || 0) <= 0} className="py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm rounded-lg transition-colors">Sana Debito</button>
+                    </div>
+                </div>
             </div>
           </div>
 
@@ -619,7 +630,8 @@ export default function App() {
                 <ul className="space-y-4 mb-8 flex-1 text-slate-300">
                   <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Tetto investimenti esentasse a 50.000€</li>
                   <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Fino a 5 prelievi giornalieri consentiti</li>
-                  <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Accesso alle Azioni e Crypto PRO</li>
+                  <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Fido Bancario fino a 50.000€</li>
+                  <li className="flex items-center"><Check className="w-5 h-5 text-amber-500 mr-3"/> Ordini di Vendita Limitati Automatici</li>
                 </ul>
                 {!user.isPro ? (
                   <button onClick={() => buyTier('PRO', 20000)} className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-500 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-opacity text-lg">Acquista Ora</button>
@@ -644,6 +656,7 @@ export default function App() {
                 <ul className="space-y-4 mb-8 flex-1 text-slate-300 z-10">
                   <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Tetto investimenti esentasse a 100.000€</li>
                   <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Fino a 8 prelievi giornalieri consentiti</li>
+                  <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Fido Bancario fino a 200.000€</li>
                   <li className="flex items-center"><Check className="w-5 h-5 text-purple-400 mr-3"/> Sblocco Mercato PRO MAX (05:00 - 22:00)</li>
                 </ul>
                 {!user.isProMax ? (
@@ -741,18 +754,21 @@ export default function App() {
               </button>
             </div>
 
-            {/* SEZIONE LOGS E BACKUP */}
+            {/* SEZIONE LOGS E BACKUP E NEWS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.1)]">
-                <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> Salvataggio Database (JSON)</h3>
-                <p className="text-xs text-slate-400 mb-4">Salva regolarmente il database prima di riavviare il server.</p>
-                <div className="flex space-x-4">
-                  <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg text-sm flex items-center justify-center"><Download className="w-4 h-4 mr-2"/> 1. Scarica DB</button>
-                  <label className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-sm flex items-center justify-center cursor-pointer">
-                    <Upload className="w-4 h-4 mr-2"/> 2. Ripristina DB
-                    <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
-                  </label>
-                </div>
+              
+              <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md flex flex-col">
+                  <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> Market Movers (Genera Notizia)</h3>
+                  <div className="flex space-x-2 mt-2">
+                      <input type="text" placeholder="Messaggio per tutti gli utenti..." value={adminNews.msg} onChange={e => setAdminNews({...adminNews, msg: e.target.value})} className="flex-1 bg-nebula-950 border border-cyan-900/50 rounded px-3 py-2 text-white text-xs outline-none" />
+                      <button onClick={() => setAdminNews({...adminNews, isBull: !adminNews.isBull})} className={`px-3 py-2 rounded text-xs font-bold border ${adminNews.isBull ? 'bg-emerald-900/50 text-emerald-400 border-emerald-500/50' : 'bg-rose-900/50 text-rose-400 border-rose-500/50'}`}>
+                          {adminNews.isBull ? 'BULL (Positivo)' : 'BEAR (Negativo)'}
+                      </button>
+                      <button onClick={() => {
+                          socket.emit('admin_action', { type: 'broadcast_news', msg: adminNews.msg, isBull: adminNews.isBull });
+                          setAdminNews({msg: '', isBull: true});
+                      }} className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded">Invia</button>
+                  </div>
               </div>
 
               {/* TENDINA LOG */}
@@ -772,11 +788,12 @@ export default function App() {
                   <div className="flex-1 bg-black/60 border border-nebula-border rounded p-3 overflow-y-auto font-mono text-[11px] text-slate-300 h-64 max-h-64 custom-scroll mt-2 shadow-inner">
                     {adminLogs.map((log, i) => {
                         let colorClass = "text-slate-300";
-                        if (log.includes("[ACQUISTO]")) colorClass = "text-amber-300";
-                        if (log.includes("[VENDITA]")) colorClass = "text-emerald-300";
+                        if (log.includes("[ACQUISTO")) colorClass = "text-amber-300";
+                        if (log.includes("[VENDITA")) colorClass = "text-emerald-300";
                         if (log.includes("[PRELIEVO]")) colorClass = "text-cyan-300";
+                        if (log.includes("[ORDINE")) colorClass = "text-indigo-300";
                         if (log.includes("[SISTEMA]") || log.includes("[MANIPOLAZIONE]")) colorClass = "text-purple-300";
-                        if (log.includes("P&L: -")) colorClass = "text-rose-400"; // Evidenzia perdite in rosso
+                        if (log.includes("P&L: -") || log.includes("[PIGNORAMENTO]")) colorClass = "text-rose-400";
                         
                         return <div key={i} className={`mb-1.5 border-b border-slate-800/50 pb-1.5 ${colorClass}`}>{log}</div>;
                     })}
@@ -786,37 +803,51 @@ export default function App() {
               </div>
             </div>
 
-            {/* SEZIONE GESTIONE FONDI TASSE */}
+            {/* SEZIONE GESTIONE FONDI TASSE E DB */}
             {dbBackupInfo && dbBackupInfo.funds && (
-              <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md mb-6 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
-                <h3 className="text-lg font-bold text-white mb-2 border-b border-emerald-900/50 pb-2 flex items-center"><Landmark className="w-5 h-5 mr-2 text-emerald-500"/> Gestione Fondi Tassazione (Escluse Crypto)</h3>
-                <p className="text-xs text-slate-400 mb-6">Le tasse variano dal 26% al 55%. Lo Stato incassa il grosso, le aziende si dividono un 6% proporzionale.</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
-                    <div>
-                      <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
-                      <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
-                    </div>
-                    <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">Preleva</button>
-                  </div>
-                  
-                  <div className="bg-nebula-950 p-4 rounded-lg border border-cyan-500/30">
-                    <div className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider mb-3">Fondi Aziendali (Da erogare)</div>
-                    <div className="space-y-2 max-h-32 overflow-y-auto custom-scroll pr-2">
-                      {Object.entries(dbBackupInfo.funds.companies).map(([ticker, amount]) => amount > 0 && (
-                        <div key={ticker} className="flex justify-between items-center text-sm border-b border-nebula-border/50 pb-2">
-                          <span className="font-bold text-white">{ticker}</span>
-                          <div className="flex items-center space-x-3">
-                            <span className="font-mono text-slate-300">{formatCurrency(amount)}</span>
-                            <button onClick={() => socket.emit('admin_withdraw_fund', { target: ticker })} className="px-2 py-1 bg-cyan-600/30 text-cyan-400 hover:bg-cyan-600/50 text-[10px] rounded">Preleva</button>
-                          </div>
+                <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.1)] md:col-span-2">
+                    <h3 className="text-lg font-bold text-white mb-2 border-b border-emerald-900/50 pb-2 flex items-center"><Landmark className="w-5 h-5 mr-2 text-emerald-500"/> Gestione Fondi Tassazione (Escluse Crypto)</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Lo Stato incassa il grosso, le aziende si dividono un 6% proporzionale.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
+                            <div>
+                            <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
+                            <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
+                            </div>
+                            <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded">Preleva</button>
                         </div>
-                      ))}
-                      {Object.values(dbBackupInfo.funds.companies).every(v => v === 0) && <div className="text-xs text-slate-500">Nessun fondo aziendale accumulato.</div>}
+                        <div className="bg-nebula-950 p-4 rounded-lg border border-cyan-500/30">
+                            <div className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider mb-3">Fondi Aziendali (Da erogare)</div>
+                            <div className="space-y-2 max-h-24 overflow-y-auto custom-scroll pr-2">
+                            {Object.entries(dbBackupInfo.funds.companies).map(([ticker, amount]) => amount > 0 && (
+                                <div key={ticker} className="flex justify-between items-center text-sm border-b border-nebula-border/50 pb-2">
+                                <span className="font-bold text-white">{ticker}</span>
+                                <div className="flex items-center space-x-3">
+                                    <span className="font-mono text-slate-300">{formatCurrency(amount)}</span>
+                                    <button onClick={() => socket.emit('admin_withdraw_fund', { target: ticker })} className="px-2 py-1 bg-cyan-600/30 text-cyan-400 hover:bg-cyan-600/50 text-[10px] rounded">Preleva</button>
+                                </div>
+                                </div>
+                            ))}
+                            {Object.values(dbBackupInfo.funds.companies).every(v => v === 0) && <div className="text-xs text-slate-500">Nessun fondo aziendale accumulato.</div>}
+                            </div>
+                        </div>
                     </div>
-                  </div>
                 </div>
+
+                <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md">
+                    <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> DB Backup</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Salva prima di riavviare.</p>
+                    <div className="flex flex-col space-y-2">
+                        <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded flex items-center justify-center text-xs"><Download className="w-3 h-3 mr-2"/> Scarica JSON</button>
+                        <label className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded flex items-center justify-center cursor-pointer text-xs">
+                        <Upload className="w-3 h-3 mr-2"/> Ripristina JSON
+                        <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
+                        </label>
+                    </div>
+                </div>
+
               </div>
             )}
 
@@ -856,7 +887,7 @@ export default function App() {
                 </div>
 
                 {adminFetchedUser && (
-                  <div className="bg-nebula-950/80 p-5 rounded-xl border border-cyan-500/30 text-sm mt-4">
+                  <div className="bg-nebula-950/80 p-5 rounded-xl border border-cyan-500/30 text-sm mt-4 relative overflow-hidden">
                     <div className="flex items-center space-x-4 mb-4 border-b border-nebula-border/50 pb-4">
                       <img src={adminFetchedUser.avatar || `https://ui-avatars.com/api/?name=${adminFetchedUser.name}`} className="w-12 h-12 rounded-full border border-nebula-border" alt="Avatar" />
                       <div>
@@ -868,10 +899,20 @@ export default function App() {
                         <div className="text-[10px] uppercase text-slate-500 font-bold">Saldo Liquido</div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 mb-4">
+                    
+                    <div className="grid grid-cols-3 gap-3 mb-4">
                       <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isProMax ? 'bg-purple-900/20 border-purple-500/50 text-purple-400' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>PRO MAX: {adminFetchedUser.isProMax ? 'ATTIVO' : 'NO'}</div>
                       <div className={`p-2 rounded text-center text-xs font-bold border ${adminFetchedUser.isPro ? 'bg-amber-900/20 border-amber-500/50 text-amber-500' : 'bg-nebula-900 border-nebula-border text-slate-500'}`}>PRO: {adminFetchedUser.isPro ? 'ATTIVO' : 'NO'}</div>
+                      <div className="p-2 rounded text-center text-xs font-bold border bg-rose-900/20 border-rose-500/50 text-rose-400">DEBITO: {formatCurrency(adminFetchedUser.loan || 0)}</div>
                     </div>
+
+                    {/* Bottone Pignoramento se in debito */}
+                    {(adminFetchedUser.loan || 0) > 0 && (
+                        <button onClick={() => { if(window.confirm('Sicuro di voler liquidare tutti gli asset di questo utente per ripagare la banca?')) socket.emit('admin_action', { type: 'liquidate_user', userId: adminFetchedUser.id }); }} className="w-full mb-4 py-2 border border-rose-500 text-rose-500 hover:bg-rose-500 hover:text-white font-bold text-xs uppercase tracking-widest rounded transition-colors flex justify-center items-center">
+                            <AlertTriangle className="w-4 h-4 mr-2"/> Esegui Pignoramento Immediato
+                        </button>
+                    )}
+
                     <div>
                       <div className="text-xs text-slate-400 mb-3 uppercase font-bold tracking-wider">Portafoglio Asset ({Object.keys(adminFetchedUser.holdings || {}).length})</div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -930,14 +971,19 @@ export default function App() {
                   </div>
                   
                   {adminValidator && (
-                    <div className="mt-4 p-4 border border-emerald-500/30 bg-emerald-900/20 rounded-lg">
-                      <h4 className="font-black text-emerald-400 mb-2 flex items-center"><Check className="w-4 h-4 mr-2"/> CHIAVE AUTENTICA</h4>
-                      <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div className="mt-4 p-4 border border-emerald-500/30 bg-emerald-900/20 rounded-lg relative overflow-hidden">
+                      {adminValidator.isRedeemed && (
+                          <div className="absolute -bottom-2 -right-4 text-rose-500 font-black text-4xl rotate-[-15deg] opacity-20 border-4 border-rose-500 p-2 z-0 pointer-events-none">RISCATTATA</div>
+                      )}
+                      <h4 className="font-black text-emerald-400 mb-2 flex items-center z-10 relative"><Check className="w-4 h-4 mr-2"/> CHIAVE AUTENTICA</h4>
+                      <div className="grid grid-cols-2 gap-2 text-xs font-mono z-10 relative">
                         <span className="text-slate-400">Utente/Ente:</span><span className="text-white font-bold">{adminValidator.name}</span>
                         <span className="text-slate-400">Da erogare (Netto):</span><span className="text-white font-bold text-lg">{formatCurrency(adminValidator.amount)}</span>
                         <span className="text-slate-400">Data:</span><span className="text-white">{adminValidator.date}</span>
                       </div>
-                      <p className="mt-3 text-xs text-emerald-300">I soldi sono già stati scalati dal conto. Eroga il pagamento reale in RP.</p>
+                      <p className={`mt-3 text-xs z-10 relative font-bold ${adminValidator.isRedeemed ? 'text-rose-400' : 'text-emerald-300'}`}>
+                          {adminValidator.isRedeemed ? 'ATTENZIONE: Questa chiave è già stata validata e pagata in passato!' : 'I soldi sono stati scalati. Eroga il pagamento in RP.'}
+                      </p>
                     </div>
                   )}
                 </div>
