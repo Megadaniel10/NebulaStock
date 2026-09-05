@@ -50,6 +50,10 @@ export default function App() {
   const [adminUserQuery, setAdminUserQuery] = useState("");
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ msg: '', isBull: true });
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
+  
+  const [priceAlerts, setPriceAlerts] = useState([]);
+  const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
   
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
