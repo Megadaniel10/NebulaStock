@@ -10,8 +10,8 @@ import {
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
-// METTI QUI IL LINK DEL TUO BACKEND
-const BACKEND_URL = "https://nuclear-spanking-jim-robert.trycloudflare.com"; 
+// MODIFICA QUI SE CLOUDFLARE CAMBIA IL LINK
+const BACKEND_URL = "https://mega-independently-relates-norm.trycloudflare.com"; 
 
 let socket;
 
@@ -55,6 +55,7 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ msg: '', isBull: true });
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
+  const [adminTickRate, setAdminTickRate] = useState(2000);
   
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
@@ -70,11 +71,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Configurazione aggiornata per bypassare i blocchi CORS del Cloudflare Tunnel
+    // FIX CORS: rimossi header custom, aggiunti websocket forzati
     socket = io(BACKEND_URL, { 
-      extraHeaders: { "ngrok-skip-browser-warning": "true" },
       withCredentials: true,
-      transports: ['polling', 'websocket'], // Inizia con polling per garantire l'handshake
+      transports: ['websocket', 'polling'],
       upgrade: true,
       reconnectionAttempts: 5,
       timeout: 10000
@@ -867,7 +867,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* SEZIONE GESTIONE RISCHIO & PIGNORAMENTI (NUOVA) */}
             <div className="mb-6 bg-nebula-900/60 p-6 border border-rose-900/80 rounded-xl backdrop-blur-md shadow-[0_0_20px_rgba(225,29,72,0.1)]">
                 <h3 className="text-lg font-bold text-white mb-2 border-b border-rose-900/50 pb-2 flex items-center"><Gavel className="w-5 h-5 mr-2 text-rose-500"/> Gestione Rischio & Pignoramenti</h3>
                 <p className="text-[10px] text-slate-400 mb-4">Utenti il cui debito bancario ha superato l'85% del loro patrimonio complessivo.</p>
@@ -915,7 +914,6 @@ export default function App() {
                 </div>
             </div>
 
-            {/* SEZIONE LOGS E BACKUP E NEWS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               
               <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md flex flex-col">
@@ -932,7 +930,6 @@ export default function App() {
                   </div>
               </div>
 
-              {/* TENDINA LOG */}
               <div className="bg-nebula-900/60 p-6 border border-slate-700 rounded-xl backdrop-blur-md flex flex-col">
                 <div 
                   className="flex justify-between items-center border-b border-slate-700 pb-2 mb-2 cursor-pointer group" 
@@ -964,7 +961,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* SEZIONE GESTIONE FONDI TASSE E DB */}
             {dbBackupInfo && dbBackupInfo.funds && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 
@@ -1015,11 +1011,24 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server</h3>
-                <div className="flex items-center space-x-4">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server & Velocità</h3>
+                
+                {/* ORA / MINUTI */}
+                <div className="flex items-center space-x-4 mb-4">
                   <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
                   <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza</button></div>
+                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza Orario</button></div>
+                </div>
+
+                {/* VELOCITÀ TICK */}
+                <div className="flex items-center space-x-4 border-t border-rose-900/50 pt-4">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Velocità Tick (ms)</label>
+                    <input type="number" value={adminTickRate} onChange={e => setAdminTickRate(e.target.value)} min="100" className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-24 outline-none" />
+                  </div>
+                  <div className="flex items-end h-full pt-5">
+                    <button onClick={() => socket.emit('admin_action', { type: 'set_tick_rate', ms: adminTickRate })} className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Velocità</button>
+                  </div>
                 </div>
               </div>
 
@@ -1067,7 +1076,6 @@ export default function App() {
                       <div className="p-2 rounded text-center text-xs font-bold border bg-rose-900/20 border-rose-500/50 text-rose-400">DEBITO: {formatCurrency(adminFetchedUser.loan || 0)}</div>
                     </div>
 
-                    {/* Bottone Pignoramento se in debito */}
                     {(adminFetchedUser.loan || 0) > 0 && (
                         <button onClick={() => { if(window.confirm('Sicuro di voler liquidare tutti gli asset di questo utente per ripagare la banca?')) socket.emit('admin_action', { type: 'liquidate_user', userId: adminFetchedUser.id }); }} className="w-full mb-4 py-2 border border-rose-500 text-rose-500 hover:bg-rose-500 hover:text-white font-bold text-xs uppercase tracking-widest rounded transition-colors flex justify-center items-center">
                             <AlertTriangle className="w-4 h-4 mr-2"/> Esegui Pignoramento Immediato
