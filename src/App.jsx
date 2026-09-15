@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND
-const BACKEND_URL = "https://biographies-shakespeare-day-asset.trycloudflare.com"; 
+const BACKEND_URL = "https://night-collect-albert-incredible.trycloudflare.com"; 
 
 let socket;
 
