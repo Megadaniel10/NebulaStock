@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI SE CLOUDFLARE CAMBIA IL LINK
-const BACKEND_URL = "https://eva-immediately-button-dual.trycloudflare.com"; 
+const BACKEND_URL = "https://nuclear-spanking-jim-robert.trycloudflare.com"; 
 
 let socket;
 
@@ -71,7 +71,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // FIX CORS: rimossi header custom, aggiunti websocket forzati
     socket = io(BACKEND_URL, { 
       withCredentials: true,
       transports: ['websocket', 'polling'],
