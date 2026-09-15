@@ -5,13 +5,13 @@ import {
   LineChart, Store, Clock, Users, Building, Percent, Search,
   LogOut, Image, Zap, Trash2, RefreshCw, Key, Download, Upload,
   Bell, Landmark, ArrowRightCircle, AlertTriangle, ScrollText, ChevronDown,
-  TrendingUp, TrendingDown, Target, ShieldAlert
+  TrendingUp, TrendingDown, Target, ShieldAlert, Trophy, Activity, Gavel
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND
-const BACKEND_URL = "https://marshall-shareware-labels-individually.trycloudflare.com"; 
+const BACKEND_URL = "https://burn-expansion-decimal-approach.trycloudflare.com"; 
 
 let socket;
 
@@ -39,6 +39,11 @@ export default function App() {
   const [discordModal, setDiscordModal] = useState({ open: false, type: '', code: '', netAmount: 0, taxAmount: 0, rate: 0 });
   const [depositModal, setDepositModal] = useState(false);
   
+  // Nuovi States per le funzionalità aggiunte
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [netWorthHistory, setNetWorthHistory] = useState([]);
+  const [riskAccounts, setRiskAccounts] = useState([]);
+
   // Admin States
   const [adminValidator, setAdminValidator] = useState(null);
   const [dbBackupInfo, setDbBackupInfo] = useState(null);
@@ -51,9 +56,6 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ msg: '', isBull: true });
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
-  
-  const [priceAlerts, setPriceAlerts] = useState([]);
-  const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
   
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [newAlert, setNewAlert] = useState({ ticker: '', target: '', mp3: '' });
@@ -98,6 +100,8 @@ export default function App() {
       setUser(current => {
         if(current.id === userId) {
           setPortfolio({ cash: acc.cash, holdings: acc.holdings });
+          // Se stiamo visualizzando il portafoglio, aggiorniamo il grafico storico
+          if(ui.activeTab === 'portfolio') socket.emit('get_net_worth_history', { userId });
           return { ...current, ...acc };
         }
         return current;
@@ -123,6 +127,11 @@ export default function App() {
       }
     });
     
+    // Nuovi socket listeners
+    socket.on('leaderboard_data', (data) => setLeaderboard(data));
+    socket.on('net_worth_history_data', (data) => setNetWorthHistory(data));
+    socket.on('admin_risk_accounts_data', (data) => setRiskAccounts(data));
+
     socket.on('admin_logs_data', (logs) => { setAdminLogs(logs.reverse()); });
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
@@ -149,6 +158,18 @@ export default function App() {
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
   }, [chatHistory, ui.activeChatRoom]);
+
+  // Gestione del cambio Tab con fetch dati mirato
+  const changeTab = (tabId) => {
+    setUi(p => ({...p, activeTab: tabId, activeMarketType: tabId==='markets' ? 'stocks' : p.activeMarketType}));
+    if (tabId === 'leaderboard') socket.emit('get_leaderboard');
+    if (tabId === 'portfolio') socket.emit('get_net_worth_history', { userId: user.id });
+    if (tabId === 'admin') {
+      socket.emit('admin_fetch_db');
+      socket.emit('admin_fetch_logs');
+      socket.emit('admin_fetch_risk_accounts');
+    }
+  };
 
   const showToast = (msg, type = 'info') => {
     const id = Date.now(); setToasts(prev => [...prev, { id, msg, type }]);
@@ -221,6 +242,35 @@ export default function App() {
     }
   }
 
+  // Costruzione della SVG per il grafico del Patrimonio
+  const renderNetWorthChart = () => {
+    if (!netWorthHistory || netWorthHistory.length < 2) return <div className="h-full flex items-center justify-center text-slate-500 text-xs italic">Dati storici insufficienti per il grafico.</div>;
+    const values = netWorthHistory.map(d => d.value);
+    const maxVal = Math.max(...values, (portfolio.cash || 0) * 1.1);
+    const minVal = Math.min(...values, (portfolio.cash || 0) * 0.9);
+    const range = maxVal - minVal || 1;
+    const pts = netWorthHistory.map((d, i) => {
+      const x = (i / (netWorthHistory.length - 1)) * 100;
+      const y = 100 - (((d.value - minVal) / range) * 100);
+      return `${x},${y}`;
+    }).join(' ');
+
+    const isProfiting = values[values.length - 1] >= values[0];
+
+    return (
+      <svg className="w-full h-full overflow-visible" viewBox="0 -10 100 120" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={isProfiting ? '#10b981' : '#f43f5e'} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={isProfiting ? '#10b981' : '#f43f5e'} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon points={`0,100 ${pts} 100,100`} fill="url(#chartGradient)" />
+        <polyline points={pts} fill="none" stroke={isProfiting ? '#34d399' : '#fb7185'} strokeWidth="2" vectorEffect="non-scaling-stroke" />
+      </svg>
+    );
+  };
+
   useEffect(() => {
     if (!activeAssetObj || ui.activeTab !== 'markets') return;
     const canvas = marketCanvasRef.current; if (!canvas) return;
@@ -282,11 +332,6 @@ export default function App() {
           <button onClick={() => window.location.href = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=identify`} className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium py-3 px-4 rounded-xl transition-all shadow-lg">
             <MessageCircle className="w-5 h-5" /><span>Accedi con Discord</span>
           </button>
-          {/* AVVISO INATTIVITA' */}
-          <div className="mt-6 border border-rose-500/50 bg-rose-900/20 rounded-lg p-3">
-              <p className="text-rose-500 font-bold text-xs uppercase flex items-center justify-center animate-pulse"><AlertTriangle className="w-4 h-4 mr-2"/> Avviso di Manutenzione</p>
-              <p className="text-[10px] text-rose-300 mt-1">Dal 6 al 13 Settembre il sito sarà inattivo per manutenzione dei server.</p>
-          </div>
         </div>
       </div>
     );
@@ -295,6 +340,7 @@ export default function App() {
   let totalStockVal = 0;
   if(portfolio.holdings && assets) { Object.keys(portfolio.holdings).forEach(t => { if(assets[t]) totalStockVal += portfolio.holdings[t].shares * assets[t].currentPrice; }); }
   const dailyWithdrawalsAllowed = user.isProMax ? 8 : (user.isPro ? 5 : 3);
+  const currentNetWorth = (portfolio.cash || 0) + totalStockVal - (user.loan || 0);
 
   return (
     <div className="h-screen w-screen flex flex-col text-sm antialiased text-e2e8f0 font-sans" style={user.bgImage ? { backgroundImage: `url(${user.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { backgroundColor: '#05070e' }}>
@@ -316,10 +362,10 @@ export default function App() {
         </div>
         <div className="flex items-center space-x-6">
           <div className="text-right hidden md:block">
-            <div className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Patrimonio</div>
-            <div className="font-mono font-bold text-white">{formatCurrency((portfolio.cash || 0) + totalStockVal)}</div>
+            <div className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Patrimonio Netto</div>
+            <div className={`font-mono font-bold ${currentNetWorth < 0 ? 'text-rose-500' : 'text-white'}`}>{formatCurrency(currentNetWorth)}</div>
           </div>
-          <div className="flex items-center space-x-3 border-l border-nebula-border pl-6 cursor-pointer hover:opacity-80" onClick={() => setUi(p => ({...p, activeTab: 'settings'}))}>
+          <div className="flex items-center space-x-3 border-l border-nebula-border pl-6 cursor-pointer hover:opacity-80" onClick={() => changeTab('settings')}>
             <div className="text-right">
               <div className="text-sm font-semibold text-white" style={{color: user.colorName}}>{user.name}</div>
               <div className={`text-[10px] font-mono font-bold ${user.isProMax ? 'bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 animate-pulse text-transparent bg-clip-text' : user.isPro ? 'text-amber-500' : 'text-cyan-400'}`}>
@@ -353,20 +399,21 @@ export default function App() {
           <div className="py-4 flex flex-col space-y-1">
             {[
               { id: 'markets', icon: LineChart, label: 'Trading Desk' }, 
-              { id: 'portfolio', icon: Wallet, label: 'Portafoglio & Banca' }, 
+              { id: 'portfolio', icon: Wallet, label: 'Portafoglio & Banca' },
+              { id: 'leaderboard', icon: Trophy, label: 'Classifica' },
               { id: 'chat', icon: MessageCircle, label: 'Comunicazioni' }, 
               { id: 'premium', icon: Crown, label: 'Abbonamenti' },
               { id: 'settings', icon: Settings, label: 'Impostazioni' }
             ].map(nav => (
-              <button key={nav.id} onClick={() => setUi(p => ({...p, activeTab: nav.id, activeMarketType: nav.id==='markets' ? 'stocks' : p.activeMarketType}))} className={`w-full flex items-center space-x-3 px-4 md:px-6 py-3 border-r-2 transition-colors ${ui.activeTab === nav.id ? 'text-white bg-nebula-800/80 border-cyan-500' : 'text-slate-400 hover:text-white hover:bg-nebula-800/50 border-transparent'}`}>
-                <nav.icon className={`w-5 h-5 text-center ${nav.id === 'premium' ? 'text-amber-500' : ''}`} /><span className="hidden md:block font-medium text-sm">{nav.label}</span>
+              <button key={nav.id} onClick={() => changeTab(nav.id)} className={`w-full flex items-center space-x-3 px-4 md:px-6 py-3 border-r-2 transition-colors ${ui.activeTab === nav.id ? 'text-white bg-nebula-800/80 border-cyan-500' : 'text-slate-400 hover:text-white hover:bg-nebula-800/50 border-transparent'}`}>
+                <nav.icon className={`w-5 h-5 text-center ${nav.id === 'premium' ? 'text-amber-500' : nav.id === 'leaderboard' ? 'text-yellow-500' : ''}`} /><span className="hidden md:block font-medium text-sm">{nav.label}</span>
               </button>
             ))}
           </div>
           <div className="p-4 flex flex-col space-y-4 justify-center md:justify-start items-center md:items-start">
             <button onClick={() => { localStorage.removeItem('nebulaState'); window.location.hash=''; window.location.reload(); }} className="text-slate-500 hover:text-rose-400 flex items-center space-x-2"><LogOut className="w-4 h-4"/><span className="hidden md:block text-xs">Disconnetti</span></button>
             {user.isAdmin && (
-              <button onClick={() => { setUi(p => ({...p, activeTab: 'admin'})); socket.emit('admin_fetch_db'); socket.emit('admin_fetch_logs'); }} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-rose-400'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
+              <button onClick={() => changeTab('admin')} className={`transition-colors flex items-center space-x-2 ${ui.activeTab === 'admin' ? 'text-rose-500' : 'text-nebula-700 hover:text-rose-400'}`} title="Dev Mode"><Lock className="w-4 h-4" /><span className="hidden md:block text-xs">Admin Panel</span></button>
             )}
           </div>
         </nav>
@@ -540,6 +587,15 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                
+                {/* GRAFICO PATRIMONIO STORICO */}
+                <div className="lg:col-span-3 bg-nebula-900/60 rounded-xl border border-nebula-border p-4 flex flex-col h-64 relative backdrop-blur-md">
+                    <h3 className="text-sm font-bold text-white mb-2 flex items-center"><Activity className="w-4 h-4 mr-2 text-cyan-500"/> Andamento Patrimonio Netto</h3>
+                    <div className="flex-1 w-full h-full relative">
+                        {renderNetWorthChart()}
+                    </div>
+                </div>
+
                 <div className="lg:col-span-2 bg-nebula-900/60 rounded-xl overflow-hidden border border-nebula-border backdrop-blur-md">
                   <table className="w-full text-left font-mono text-xs md:text-sm">
                     <thead><tr className="bg-nebula-900 border-b border-nebula-border text-slate-400 uppercase"><th className="p-4">Asset</th><th className="p-4">Qty</th><th className="p-4">PMD</th><th className="p-4">Attuale</th><th className="p-4">P&L</th><th className="p-4 text-right">Azione</th></tr></thead>
@@ -557,18 +613,20 @@ export default function App() {
                           </tr>
                         );
                       })}
+                      {Object.keys(portfolio.holdings || {}).length === 0 && <tr><td colSpan="6" className="p-8 text-center text-slate-500 italic">Nessun asset in portafoglio.</td></tr>}
                     </tbody>
                   </table>
                 </div>
 
                 {/* BANCA / PRESTITI */}
                 <div className="bg-nebula-900/60 rounded-xl border border-rose-900/50 p-6 flex flex-col backdrop-blur-md shadow-[0_0_15px_rgba(225,29,72,0.05)]">
-                    <h3 className="text-lg font-bold text-white mb-2 flex items-center border-b border-rose-900/50 pb-2"><Landmark className="w-5 h-5 mr-2 text-rose-500"/> Banca: Linea di Credito</h3>
-                    <p className="text-xs text-slate-400 mb-4">Usa il fido bancario per investire oltre le tue possibilità. <span className="text-rose-400 font-bold">Attenzione ai pignoramenti automatici.</span></p>
+                    <h3 className="text-lg font-bold text-white mb-2 flex items-center border-b border-rose-900/50 pb-2"><Landmark className="w-5 h-5 mr-2 text-rose-500"/> Banca Centrale</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Usa il fido bancario per investire oltre le tue possibilità. <span className="text-rose-400 font-bold">Attenzione ai pignoramenti automatici.</span></p>
                     
                     <div className="bg-nebula-950 p-4 rounded-lg border border-nebula-border mb-4">
                         <div className="text-[10px] uppercase text-slate-500 font-bold mb-1 tracking-wider">Debito Attuale</div>
                         <div className="text-3xl font-mono font-black text-rose-500">{formatCurrency(user.loan || 0)}</div>
+                        <div className="text-[10px] text-slate-500 mt-2 italic">Interesse applicato ogni fine giornata.</div>
                     </div>
 
                     <div className="flex flex-col space-y-2 mt-auto">
@@ -577,11 +635,51 @@ export default function App() {
                             if(amt && !isNaN(parseFloat(amt))) socket.emit('take_loan', { userId: user.id, amount: parseFloat(amt) });
                         }} className="py-3 border-2 border-rose-600/50 hover:bg-rose-600/20 text-rose-400 font-bold text-sm rounded-lg transition-colors">Richiedi Finanziamento</button>
                         <button onClick={() => {
-                            const amt = prompt("Importo da ripagare:");
+                            const amt = prompt("Importo da ripagare (verrà scalato dal tuo saldo liquido):");
                             if(amt && !isNaN(parseFloat(amt))) socket.emit('repay_loan', { userId: user.id, amount: parseFloat(amt) });
                         }} disabled={(user.loan || 0) <= 0} className="py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm rounded-lg transition-colors">Sana Debito</button>
                     </div>
                 </div>
+            </div>
+          </div>
+
+          {/* TAB LEADERBOARD (CLASSIFICA) */}
+          <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'leaderboard' ? 'flex' : 'hidden'}`}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white flex items-center"><Trophy className="w-6 h-6 mr-3 text-yellow-500"/> I Lupi di Wall Street</h2>
+            </div>
+            <div className="max-w-4xl mx-auto bg-nebula-900/60 rounded-xl border border-nebula-border overflow-hidden backdrop-blur-md">
+                <table className="w-full text-left font-mono">
+                    <thead>
+                        <tr className="bg-nebula-900 border-b border-nebula-border text-slate-400 uppercase text-xs">
+                            <th className="p-4">Rank</th>
+                            <th className="p-4">Investitore</th>
+                            <th className="p-4">Tier</th>
+                            <th className="p-4 text-right">Patrimonio Netto</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-nebula-border/50">
+                        {leaderboard.map((lb, index) => (
+                            <tr key={lb.id} className={`transition-colors ${user.id === lb.id ? 'bg-cyan-900/20' : 'hover:bg-nebula-800/50'}`}>
+                                <td className="p-4">
+                                    <div className="flex items-center justify-center w-8 h-8 rounded-full font-bold bg-nebula-950 border border-nebula-border text-slate-300">
+                                        {index === 0 ? <span className="text-yellow-500">1</span> : index === 1 ? <span className="text-slate-300">2</span> : index === 2 ? <span className="text-amber-700">3</span> : index + 1}
+                                    </div>
+                                </td>
+                                <td className="p-4 flex items-center space-x-3">
+                                    <img src={lb.avatar || `https://ui-avatars.com/api/?name=${lb.name}`} className="w-8 h-8 rounded-full border border-nebula-border" alt="" />
+                                    <span className="font-bold font-sans" style={{color: lb.colorName || '#fff'}}>{lb.name}</span>
+                                    {user.id === lb.id && <span className="text-[10px] bg-cyan-600/30 text-cyan-400 px-2 py-0.5 rounded font-sans uppercase">Tu</span>}
+                                </td>
+                                <td className="p-4 text-xs font-sans font-bold">
+                                    {lb.isProMax ? <span className="text-purple-400">PRO MAX</span> : lb.isPro ? <span className="text-amber-500">PRO</span> : <span className="text-slate-500">STANDARD</span>}
+                                </td>
+                                <td className="p-4 text-right text-white font-bold">{formatCurrency(lb.netWorth)}</td>
+                            </tr>
+                        ))}
+                        {leaderboard.length === 0 && <tr><td colSpan="4" className="p-8 text-center text-slate-500 italic">Nessun dato disponibile.</td></tr>}
+                    </tbody>
+                </table>
             </div>
           </div>
 
@@ -766,6 +864,54 @@ export default function App() {
               </button>
             </div>
 
+            {/* SEZIONE GESTIONE RISCHIO & PIGNORAMENTI (NUOVA) */}
+            <div className="mb-6 bg-nebula-900/60 p-6 border border-rose-900/80 rounded-xl backdrop-blur-md shadow-[0_0_20px_rgba(225,29,72,0.1)]">
+                <h3 className="text-lg font-bold text-white mb-2 border-b border-rose-900/50 pb-2 flex items-center"><Gavel className="w-5 h-5 mr-2 text-rose-500"/> Gestione Rischio & Pignoramenti</h3>
+                <p className="text-[10px] text-slate-400 mb-4">Utenti il cui debito bancario ha superato l'85% del loro patrimonio complessivo.</p>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left font-mono text-xs">
+                        <thead>
+                            <tr className="bg-nebula-950 text-slate-400 uppercase">
+                                <th className="p-3 rounded-tl-lg">Utente (ID)</th>
+                                <th className="p-3">Patrimonio Netto</th>
+                                <th className="p-3 text-rose-400">Debito Banca</th>
+                                <th className="p-3">Rischio (%)</th>
+                                <th className="p-3 rounded-tr-lg text-right">Azione</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-nebula-border/50 text-slate-200">
+                            {riskAccounts.map(ra => (
+                                <tr key={ra.id} className="hover:bg-nebula-800/30">
+                                    <td className="p-3 font-bold text-white">{ra.name} <span className="text-[10px] text-slate-500 block">{ra.id}</span></td>
+                                    <td className="p-3">{formatCurrency(ra.netWorth)}</td>
+                                    <td className="p-3 text-rose-400 font-bold">{formatCurrency(ra.loan)}</td>
+                                    <td className="p-3">
+                                        <div className="flex items-center space-x-2">
+                                            <div className="w-24 h-2 bg-nebula-950 rounded overflow-hidden"><div className="h-full bg-rose-500" style={{width: `${Math.min(100, ra.ratio * 100)}%`}}></div></div>
+                                            <span>{(ra.ratio * 100).toFixed(1)}%</span>
+                                        </div>
+                                    </td>
+                                    <td className="p-3 text-right">
+                                        <button onClick={() => {
+                                            if(window.confirm(`Pignorare e azzerare il debito e gli asset di ${ra.name}?`)) {
+                                                socket.emit('admin_action', { type: 'liquidate_user', userId: ra.id });
+                                                setTimeout(() => socket.emit('admin_fetch_risk_accounts'), 1000);
+                                            }
+                                        }} className="bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded text-white font-bold text-[10px] uppercase tracking-wider flex items-center justify-end w-full">
+                                            <AlertTriangle className="w-3 h-3 mr-1"/> Liquida
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {riskAccounts.length === 0 && <tr><td colSpan="5" className="p-6 text-center text-emerald-500 italic font-bold">Nessun account a rischio di bancarotta rilevato.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="mt-4 flex justify-end">
+                    <button onClick={() => socket.emit('admin_fetch_risk_accounts')} className="text-[10px] uppercase text-cyan-400 hover:text-cyan-300 font-bold flex items-center"><RefreshCw className="w-3 h-3 mr-1"/> Aggiorna Lista</button>
+                </div>
+            </div>
+
             {/* SEZIONE LOGS E BACKUP E NEWS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               
@@ -805,7 +951,7 @@ export default function App() {
                         if (log.includes("[PRELIEVO]")) colorClass = "text-cyan-300";
                         if (log.includes("[ORDINE")) colorClass = "text-indigo-300";
                         if (log.includes("[SISTEMA]") || log.includes("[MANIPOLAZIONE]")) colorClass = "text-purple-300";
-                        if (log.includes("P&L: -") || log.includes("[PIGNORAMENTO]")) colorClass = "text-rose-400";
+                        if (log.includes("P&L: -") || log.includes("[PIGNORAMENTO]") || log.includes("[BANCA]")) colorClass = "text-rose-400";
                         
                         return <div key={i} className={`mb-1.5 border-b border-slate-800/50 pb-1.5 ${colorClass}`}>{log}</div>;
                     })}
