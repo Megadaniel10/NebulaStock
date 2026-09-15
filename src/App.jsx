@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // METTI QUI IL LINK DEL TUO BACKEND
-const BACKEND_URL = "https://burn-expansion-decimal-approach.trycloudflare.com"; 
+const BACKEND_URL = "https://biographies-shakespeare-day-asset.trycloudflare.com"; 
 
 let socket;
 
@@ -39,7 +39,6 @@ export default function App() {
   const [discordModal, setDiscordModal] = useState({ open: false, type: '', code: '', netAmount: 0, taxAmount: 0, rate: 0 });
   const [depositModal, setDepositModal] = useState(false);
   
-  // Nuovi States per le funzionalità aggiunte
   const [leaderboard, setLeaderboard] = useState([]);
   const [netWorthHistory, setNetWorthHistory] = useState([]);
   const [riskAccounts, setRiskAccounts] = useState([]);
@@ -71,7 +70,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    socket = io(BACKEND_URL, { extraHeaders: { "ngrok-skip-browser-warning": "true" } });
+    // Configurazione aggiornata per bypassare i blocchi CORS del Cloudflare Tunnel
+    socket = io(BACKEND_URL, { 
+      extraHeaders: { "ngrok-skip-browser-warning": "true" },
+      withCredentials: true, 
+      transports: ['websocket', 'polling']
+    });
 
     socket.on('market_init', (data) => {
       setAssets(data.assets || {});
@@ -100,7 +104,6 @@ export default function App() {
       setUser(current => {
         if(current.id === userId) {
           setPortfolio({ cash: acc.cash, holdings: acc.holdings });
-          // Se stiamo visualizzando il portafoglio, aggiorniamo il grafico storico
           if(ui.activeTab === 'portfolio') socket.emit('get_net_worth_history', { userId });
           return { ...current, ...acc };
         }
@@ -127,7 +130,6 @@ export default function App() {
       }
     });
     
-    // Nuovi socket listeners
     socket.on('leaderboard_data', (data) => setLeaderboard(data));
     socket.on('net_worth_history_data', (data) => setNetWorthHistory(data));
     socket.on('admin_risk_accounts_data', (data) => setRiskAccounts(data));
@@ -159,7 +161,6 @@ export default function App() {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
   }, [chatHistory, ui.activeChatRoom]);
 
-  // Gestione del cambio Tab con fetch dati mirato
   const changeTab = (tabId) => {
     setUi(p => ({...p, activeTab: tabId, activeMarketType: tabId==='markets' ? 'stocks' : p.activeMarketType}));
     if (tabId === 'leaderboard') socket.emit('get_leaderboard');
@@ -242,7 +243,6 @@ export default function App() {
     }
   }
 
-  // Costruzione della SVG per il grafico del Patrimonio
   const renderNetWorthChart = () => {
     if (!netWorthHistory || netWorthHistory.length < 2) return <div className="h-full flex items-center justify-center text-slate-500 text-xs italic">Dati storici insufficienti per il grafico.</div>;
     const values = netWorthHistory.map(d => d.value);
@@ -606,7 +606,7 @@ export default function App() {
                         return (
                           <tr key={ticker} className="hover:bg-nebula-800/50 transition-colors">
                             <td className="p-4 font-bold text-white flex items-center space-x-2"><span>{asset.ticker}</span></td><td className="p-4">{h.shares}</td><td className="p-4 text-slate-400">{formatCurrency(h.avgPrice)}</td><td className="p-4 text-white">{formatCurrency(asset.currentPrice)}</td>
-                            <td className={`p-4 font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</td>
+                            <td className={`p-4 font-bold ${pnl >= 0 ? 'textemerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}</td>
                             <td className="p-4 text-right"><button onClick={() => {
                                 socket.emit('execute_trade', { userId: user.id, type: 'SELL', ticker, qty: h.shares });
                             }} className="text-xs bg-rose-600/20 text-rose-400 px-3 py-1 rounded hover:bg-rose-600/40">Vendi Tutto</button></td>
