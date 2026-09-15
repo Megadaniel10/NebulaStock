@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI SE CLOUDFLARE CAMBIA IL LINK
-const BACKEND_URL = "https://mega-independently-relates-norm.trycloudflare.com"; 
+const BACKEND_URL = "https://eva-immediately-button-dual.trycloudflare.com"; 
 
 let socket;
 
