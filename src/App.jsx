@@ -73,8 +73,11 @@ export default function App() {
     // Configurazione aggiornata per bypassare i blocchi CORS del Cloudflare Tunnel
     socket = io(BACKEND_URL, { 
       extraHeaders: { "ngrok-skip-browser-warning": "true" },
-      withCredentials: true, 
-      transports: ['websocket', 'polling']
+      withCredentials: true,
+      transports: ['polling', 'websocket'], // Inizia con polling per garantire l'handshake
+      upgrade: true,
+      reconnectionAttempts: 5,
+      timeout: 10000
     });
 
     socket.on('market_init', (data) => {
