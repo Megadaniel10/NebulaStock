@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
+const BACKEND_URL = "https://calvin-taxes-configured-trips.trycloudflare.com"; 
 
 let socket;
 
