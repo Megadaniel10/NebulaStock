@@ -11,7 +11,7 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://calvin-taxes-configured-trips.trycloudflare.com"; 
+const BACKEND_URL = "https://again-guaranteed-allows-tion.trycloudflare.com"; 
 
 let socket;
 
@@ -35,6 +35,7 @@ export default function App() {
   const [resizeTrigger, setResizeTrigger] = useState(0);
   const [mousePos, setMousePos] = useState(null); 
   const [isChartFS, setIsChartFS] = useState(false);
+  const [fsTradeOpen, setFsTradeOpen] = useState(false); // Pannello trade in FS
   
   const [discordModal, setDiscordModal] = useState({ open: false, type: '', code: '', netAmount: 0, taxAmount: 0, rate: 0 });
   const [depositModal, setDepositModal] = useState(false);
@@ -43,6 +44,7 @@ export default function App() {
   const [adminValidator, setAdminValidator] = useState(null);
   const [dbBackupInfo, setDbBackupInfo] = useState(null);
   const [adminLogs, setAdminLogs] = useState([]);
+  const [adminUsersList, setAdminUsersList] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [adminCash, setAdminCash] = useState({ uid: '', amount: 100, action: 'add' });
   const [adminPriceEdit, setAdminPriceEdit] = useState({ ticker: 'SNEB', newPrice: '', vol: '' });
@@ -51,7 +53,7 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ title: '', msg: '', isBull: true });
   const [adminHoldingsEdit, setAdminHoldingsEdit] = useState({ ticker: 'SNEB', action: 'add', qty: 1 });
-  const [adminPromo, setAdminPromo] = useState({ tier: 'PRO', days: 30, generatedCode: '' });
+  const [adminPromo, setAdminPromo] = useState({ tier: 'PRO', duration: 30, unit: 'days', generatedCode: '', label: '' });
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false });
   const [riskAccounts, setRiskAccounts] = useState([]);
   const [adminTickRate, setAdminTickRate] = useState(2000);
@@ -60,9 +62,8 @@ export default function App() {
   const chatScrollRef = useRef(null);
   const downloadRequestedRef = useRef(false); 
 
-  // Persistenza Tab Compagnia Selezionata
   useEffect(() => {
-      const savedAsset = localStorage.getItem('lastAsset');
+      const savedAsset = localStorage.getItem('nebula_selected_asset');
       if (savedAsset) setUi(p => ({ ...p, activeAsset: savedAsset }));
   }, []);
 
@@ -102,12 +103,13 @@ export default function App() {
     
     socket.on('admin_logs_data', (logs) => { setAdminLogs(logs.reverse()); });
     socket.on('admin_risk_accounts_data', (data) => setRiskAccounts(data));
+    socket.on('admin_users_list', (list) => setAdminUsersList(list));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
     
-    socket.on('admin_promo_generated', ({ code, days }) => {
-        setAdminPromo(p => ({ ...p, generatedCode: code }));
-        showToast(`Codice Generato (${days} gg)`, 'success');
+    socket.on('admin_promo_generated', ({ code, label }) => {
+        setAdminPromo(p => ({ ...p, generatedCode: code, label }));
+        showToast(`Codice Generato (${label})`, 'success');
     });
 
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
@@ -134,12 +136,17 @@ export default function App() {
 
   const changeTab = (tabId) => {
     setUi(p => ({...p, activeTab: tabId, activeMarketType: tabId==='markets' ? 'stocks' : p.activeMarketType}));
-    if (tabId === 'admin') { socket.emit('admin_fetch_db'); socket.emit('admin_fetch_logs'); socket.emit('admin_fetch_risk_accounts'); }
+    if (tabId === 'admin') { 
+        socket.emit('admin_fetch_db'); 
+        socket.emit('admin_fetch_logs'); 
+        socket.emit('admin_fetch_risk_accounts'); 
+        socket.emit('admin_fetch_users_list');
+    }
   };
 
   const selectAsset = (ticker) => {
       setUi(p => ({...p, activeAsset: ticker}));
-      localStorage.setItem('lastAsset', ticker);
+      localStorage.setItem('nebula_selected_asset', ticker);
   };
 
   const showToast = (msg, type = 'info') => {
@@ -157,8 +164,6 @@ export default function App() {
 
   const executeOrder = (type) => { socket.emit('execute_trade', { userId: user.id, type, ticker: ui.activeAsset, qty: parseFloat(tradeQty) }); };
   
-  // INVERTITA E FIXATA LOGICA LIMIT ORDER: 
-  // 'BUY' aspetta che scenda ('LESS'), 'SELL' aspetta che salga ('GREATER')
   const placeLimitOrder = (type, condition) => {
       if(!limitPrice || parseFloat(limitPrice) <= 0) return showToast("Inserisci un prezzo valido", "error");
       socket.emit('place_limit_order', { userId: user.id, type, condition, ticker: ui.activeAsset, qty: parseFloat(tradeQty), targetPrice: parseFloat(limitPrice) });
@@ -191,7 +196,8 @@ export default function App() {
   const handleDownloadLogs = () => {
     const text = adminLogs.join('\n'); const blob = new Blob([text], {type: 'text/plain'});
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url;
-    a.download = `nebula_logs_${new Date().toISOString().split('T')[0]}.txt`; a.click(); URL.revokeObjectURL(url);
+    a.download = `nebula_logs_${new Date().toISOString().split('T')[0]}.txt`;
+    a.click(); URL.revokeObjectURL(url);
   };
 
   const handleRestoreDb = (e) => {
@@ -277,11 +283,6 @@ export default function App() {
           <button onClick={() => window.location.href = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=identify`} className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium py-3 px-4 rounded-xl transition-all shadow-lg">
             <MessageCircle className="w-5 h-5" /><span>Accedi con Discord</span>
           </button>
-          {/* AVVISO INATTIVITA' */}
-          <div className="mt-6 border border-rose-500/50 bg-rose-900/20 rounded-lg p-3">
-              <p className="text-rose-500 font-bold text-xs uppercase flex items-center justify-center animate-pulse"><AlertTriangle className="w-4 h-4 mr-2"/> Avviso di Manutenzione</p>
-              <p className="text-[10px] text-rose-300 mt-1">Dal 6 al 13 Settembre il sito sarà inattivo per manutenzione dei server.</p>
-          </div>
         </div>
       </div>
     );
@@ -413,13 +414,6 @@ export default function App() {
                         <span className="text-slate-400 flex items-center"><Coins className="w-3 h-3 mr-1 text-slate-500"/>Cap: <span className="font-mono ml-1 text-slate-300">{activeAssetObj.mcap}</span></span>
                       </div>
                       <div className="mt-2 text-xs text-slate-400 max-w-xl">{activeAssetObj.desc}</div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-xs border-t border-nebula-border/50 pt-4">
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1"/> CEO</span><span className="font-semibold text-slate-200 truncate">{activeAssetObj.extra?.ceo}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Building className="w-3 h-3 mr-1"/> Fondazione</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.founded}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Users className="w-3 h-3 mr-1"/> Dipendenti</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.employees}</span></div>
-                        <div className="flex flex-col"><span className="text-slate-500 mb-1 flex items-center"><Percent className="w-3 h-3 mr-1"/> Dividendo</span><span className="font-semibold text-slate-200">{activeAssetObj.extra?.dividend}</span></div>
-                      </div>
                     </div>
                     <div className="text-left md:text-right shrink-0"><div className={`text-3xl font-mono font-black ${activeAssetObj.isProMax ? 'bg-gradient-to-r from-purple-400 to-rose-400 animate-pulse text-transparent bg-clip-text drop-shadow-md' : 'text-white'}`}>{formatCurrency(activeAssetObj.currentPrice)}</div></div>
                   </div>
@@ -438,12 +432,40 @@ export default function App() {
                           {isChartFS ? <Minimize className="w-4 h-4"/> : <Maximize className="w-4 h-4"/>}
                       </button>
                     </div>
+                    
                     {isChartFS && (
                         <div className="flex justify-between items-center mb-4 px-2">
                             <h2 className="text-2xl font-bold text-white">{activeAssetObj.name} ({activeAssetObj.ticker})</h2>
                             <div className="text-2xl font-mono text-cyan-400">{formatCurrency(activeAssetObj.currentPrice)}</div>
                         </div>
                     )}
+                    
+                    {/* PANNELLO TRADE IN FULLSCREEN */}
+                    {isChartFS && (
+                      <div className="absolute bottom-8 left-8 z-[110]">
+                          {fsTradeOpen && (
+                              <div className="bg-nebula-950/95 backdrop-blur-md border border-cyan-500/50 p-4 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] mb-4 w-72 animate-fade-in origin-bottom-left">
+                                  <div className="flex justify-between items-center mb-3">
+                                      <h4 className="text-white font-bold flex items-center"><Wallet className="w-4 h-4 mr-2 text-cyan-400"/> Trade {activeAssetObj.ticker}</h4>
+                                      <button onClick={() => setFsTradeOpen(false)} className="text-slate-400 hover:text-white"><X className="w-4 h-4"/></button>
+                                  </div>
+                                  <div className="text-xs text-slate-400 mb-2 flex justify-between">
+                                      <span>Cassa:</span> <span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span>
+                                  </div>
+                                  <input type="number" min="0.01" step="any" value={tradeQty} onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-black/50 border border-nebula-border rounded-lg px-3 py-2 text-white font-mono mb-3 outline-none focus:border-cyan-500" />
+                                  <div className="grid grid-cols-2 gap-2">
+                                      <button onClick={() => executeOrder('BUY')} className="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg uppercase text-xs">Compra</button>
+                                      <button onClick={() => executeOrder('SELL')} className="py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg uppercase text-xs">Vendi</button>
+                                  </div>
+                              </div>
+                          )}
+                          <button onClick={() => setFsTradeOpen(!fsTradeOpen)} className="flex items-center space-x-2 bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-3 rounded-full font-bold shadow-[0_0_15px_rgba(8,145,178,0.5)] transition-transform hover:scale-105">
+                              <Coins className="w-5 h-5"/>
+                              <span>Apri Terminale Ordini</span>
+                          </button>
+                      </div>
+                    )}
+
                     <div 
                       className={`relative w-full border border-nebula-border rounded-xl bg-nebula-950/80 overflow-hidden ${isChartFS ? 'flex-1' : 'h-full'}`}
                       onMouseMove={(e) => {
@@ -831,7 +853,7 @@ export default function App() {
                   </div>
               </div>
 
-              {/* GENERATORE CODICI SCONTO */}
+              {/* GENERATORE CODICI SCONTO (AGGIORNATO) */}
               <div className="bg-nebula-900/60 p-6 border border-amber-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
                   <h3 className="text-lg font-bold text-amber-500 mb-2 border-b border-amber-500/30 pb-2 flex items-center"><Key className="w-5 h-5 mr-2"/> Generatore Codici Abbonamento</h3>
                   <p className="text-[10px] text-slate-400 mb-4">Crea codici promozionali a tempo determinato.</p>
@@ -840,14 +862,25 @@ export default function App() {
                           <option value="PRO">PRO</option>
                           <option value="PROMAX">PRO MAX</option>
                       </select>
-                      <input type="number" min="1" value={adminPromo.days} onChange={e => setAdminPromo({...adminPromo, days: parseInt(e.target.value) || 1})} className="w-20 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-xs outline-none" placeholder="Giorni" />
+                      
+                      <select value={adminPromo.unit} onChange={e => setAdminPromo({...adminPromo, unit: e.target.value})} className="bg-nebula-950 border border-nebula-border rounded px-2 py-2 text-white text-xs outline-none">
+                          <option value="days">Giorni</option>
+                          <option value="months">Mesi</option>
+                          <option value="years">Anni</option>
+                          <option value="lifetime">Lifetime</option>
+                      </select>
+
+                      {adminPromo.unit !== 'lifetime' && (
+                          <input type="number" min="1" value={adminPromo.duration} onChange={e => setAdminPromo({...adminPromo, duration: parseInt(e.target.value) || 1})} className="w-16 bg-nebula-950 border border-nebula-border rounded px-2 py-2 text-white font-mono text-xs outline-none" placeholder="Durata" />
+                      )}
+                      
                       <button onClick={() => {
-                          socket.emit('admin_action', { type: 'generate_promo', tier: adminPromo.tier, days: adminPromo.days });
-                      }} className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded transition-colors">Genera Codice</button>
+                          socket.emit('admin_action', { type: 'generate_promo', tier: adminPromo.tier, duration: adminPromo.duration, unit: adminPromo.unit });
+                      }} className="flex-1 px-2 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded transition-colors">Genera</button>
                   </div>
                   {adminPromo.generatedCode && (
                       <div className="bg-black/50 border border-amber-500/50 p-2 rounded text-center">
-                          <span className="text-[10px] text-slate-400 block mb-1">Codice Generato ({adminPromo.days} Giorni):</span>
+                          <span className="text-[10px] text-slate-400 block mb-1">Codice Generato ({adminPromo.label}):</span>
                           <span className="font-mono text-amber-400 font-bold select-all">{adminPromo.generatedCode}</span>
                       </div>
                   )}
@@ -935,6 +968,15 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server</h3>
+                <div className="flex items-center space-x-4">
+                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza</button></div>
+                </div>
+              </div>
+
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Modifica Asset (Live)</h3>
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="col-span-2"><label className="text-xs text-slate-400 block mb-1">Seleziona Asset</label><select value={adminPriceEdit.ticker} onChange={e => setAdminPriceEdit({ ...adminPriceEdit, ticker: e.target.value })} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">{Object.keys(assets || {}).map(k => <option key={k} value={k}>{k}</option>)}</select></div>
@@ -951,11 +993,17 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ISPEZIONE UTENTE AGGIORNATA (MENU A TENDINA) */}
               <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl lg:col-span-2 backdrop-blur-md transition-all">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione & Controllo Utente</h3>
                 <div className="flex space-x-4 mb-4">
-                  <input type="text" value={adminUserQuery} onChange={e => setAdminUserQuery(e.target.value)} placeholder="ID Utente Discord (es. 123456789)" className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none focus:border-cyan-500 transition-colors" />
-                  <button onClick={() => socket.emit('admin_fetch_user', adminUserQuery.trim())} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded transition-colors">Cerca Utente</button>
+                  <select value={adminUserQuery} onChange={e => setAdminUserQuery(e.target.value)} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none focus:border-cyan-500 transition-colors">
+                      <option value="">-- Seleziona un utente dalla lista --</option>
+                      {adminUsersList.map(u => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.id})</option>
+                      ))}
+                  </select>
+                  <button onClick={() => { if(adminUserQuery) socket.emit('admin_fetch_user', adminUserQuery); }} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded transition-colors">Ispeziona</button>
                 </div>
 
                 {adminFetchedUser && (
@@ -1026,36 +1074,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div className="bg-nebula-900/60 p-6 border border-amber-900/50 rounded-xl backdrop-blur-md">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-amber-900/50 pb-2">Forza Abbonamento Utente</h3>
-                <div className="space-y-4">
-                  <div><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" id="adm-tier-uid" className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none mt-1" /></div>
-                  <div>
-                    <label className="text-xs text-slate-400">Livello Abbonamento</label>
-                    <select id="adm-tier-sel" className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none mt-1">
-                      <option value="STANDARD">Standard</option>
-                      <option value="PRO">PRO</option>
-                      <option value="PROMAX">PRO MAX</option>
-                    </select>
-                  </div>
-                  <button onClick={() => socket.emit('admin_action', { type: 'set_tier', userId: document.getElementById('adm-tier-uid').value, tier: document.getElementById('adm-tier-sel').value })} className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Abbonamento</button>
-                </div>
-              </div>
-
-              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Banca Centrale: Forza Saldo Utente</h3>
-                <div className="space-y-4">
-                  <div><label className="text-xs text-slate-400">ID Utente Discord</label><input type="text" value={adminCash.uid} onChange={e => setAdminCash({...adminCash, uid: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none mt-1" /></div>
-                  
-                  <div className="flex space-x-2">
-                    <div className="flex-1"><label className="text-xs text-slate-400">Azione</label><select value={adminCash.action} onChange={e => setAdminCash({...adminCash, action: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none mt-1"><option value="add">Aggiungi (+)</option><option value="sub">Rimuovi (-)</option><option value="set">Imposta a (=)</option><option value="reset">Reset (100€)</option></select></div>
-                    <div className="flex-1"><label className="text-xs text-slate-400">Importo (€)</label><input type="number" step="any" disabled={adminCash.action === 'reset'} value={adminCash.amount} onChange={e => setAdminCash({...adminCash, amount: e.target.value})} className="w-full bg-nebula-900 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none mt-1 disabled:opacity-50" /></div>
-                  </div>
-                  
-                  <button onClick={() => socket.emit('admin_action', { type: 'cash', userId: adminCash.uid, action: adminCash.action, amount: parseFloat(adminCash.amount) })} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded">Applica Transazione</button>
-                </div>
               </div>
 
               <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl lg:col-span-2 backdrop-blur-md transition-all">
@@ -1196,7 +1214,7 @@ export default function App() {
         </div>
       )}
 
-      {/* STILI PER ANIMAZIONI GLOBALI */}
+      {/* STILI PER ANIMAZIONI GLOBALI E FULLSCREEN */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
