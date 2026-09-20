@@ -340,7 +340,7 @@ export default function App() {
                   <button onClick={() => window.open('https://discord.gg/3g3bRnYXz7', '_blank')} className="flex-1 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-2 rounded-xl transition-colors border border-nebula-border text-xs">
                       <span>Server Discord</span>
                   </button>
-                  <button onClick={() => window.open('https://urbanrp.it', '_blank')} className="flex-1 flex items-center justify-center bg-indigo-900/50 hover:bg-indigo-800/80 text-indigo-300 font-bold py-3 px-2 rounded-xl transition-colors border border-indigo-500/30 text-xs">
+                  <button onClick={() => window.open('https://urbanrp-hq.vercel.app/', '_blank')} className="flex-1 flex items-center justify-center bg-indigo-900/50 hover:bg-indigo-800/80 text-indigo-300 font-bold py-3 px-2 rounded-xl transition-colors border border-indigo-500/30 text-xs">
                       <Globe className="w-4 h-4 mr-2" /><span>Sito Urban RP</span>
                   </button>
               </div>
