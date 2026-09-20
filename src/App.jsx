@@ -368,7 +368,7 @@ export default function App() {
       {/* EASTER EGG DAJE ROMA (PUNTO 8) */}
       {showEasterEgg && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center pointer-events-none bg-black/80">
-              <img src="/totti.jpg" alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
+              <img src="/totti.png" alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
           </div>
       )}
 
