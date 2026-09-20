@@ -9,15 +9,18 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
+// IMPORTA L'IMMAGINE DALLA CARTELLA SRC
+import tottiImg from './totti.png';
+
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://premium-tiger-location-corn.trycloudflare.com"; 
+const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
 
 let socket;
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
-  const [isBackendOnline, setIsBackendOnline] = useState(false); // NUOVO STATO CONNESSIONE
+  const [isBackendOnline, setIsBackendOnline] = useState(false);
   const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', bgImage: '', isAdmin: false, isFinanza: false, isFrozen: false, withdrawalsToday: 0, limitOrders: [], hasSeenResetPopup: true });
   const [portfolio, setPortfolio] = useState({ cash: 3000, holdings: {} }); 
   
@@ -57,7 +60,7 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ title: '', msg: '', isBull: true });
   const [adminHoldingsEdit, setAdminHoldingsEdit] = useState({ ticker: 'SNEB', action: 'add', qty: 1 });
-  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false, maxShares: 1000, maxPrice: 600, minPrice: 0.01, holdingTax: 0 });
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 1000, maxPrice: 600, minPrice: 0.01, holdingTax: 0 });
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
   const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
@@ -119,11 +122,6 @@ export default function App() {
     socket.on('admin_users_list', (list) => setAdminUsersList(list));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
-    
-    socket.on('admin_promo_generated', ({ code, label }) => {
-        setAdminPromo(p => ({ ...p, generatedCode: code, label }));
-        showToast(`Codice Generato (${label})`, 'success');
-    });
 
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
       setDiscordModal({ open: true, type: 'WITHDRAW_SUCCESS', code, netAmount, taxAmount, rate });
@@ -340,7 +338,7 @@ export default function App() {
                   <button onClick={() => window.open('https://discord.gg/3g3bRnYXz7', '_blank')} className="flex-1 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-2 rounded-xl transition-colors border border-nebula-border text-xs">
                       <span>Server Discord</span>
                   </button>
-                  <button onClick={() => window.open('https://urbanrp-hq.vercel.app/', '_blank')} className="flex-1 flex items-center justify-center bg-indigo-900/50 hover:bg-indigo-800/80 text-indigo-300 font-bold py-3 px-2 rounded-xl transition-colors border border-indigo-500/30 text-xs">
+                  <button onClick={() => window.open('https://urbanrp.it', '_blank')} className="flex-1 flex items-center justify-center bg-indigo-900/50 hover:bg-indigo-800/80 text-indigo-300 font-bold py-3 px-2 rounded-xl transition-colors border border-indigo-500/30 text-xs">
                       <Globe className="w-4 h-4 mr-2" /><span>Sito Urban RP</span>
                   </button>
               </div>
@@ -377,7 +375,7 @@ export default function App() {
   return (
     <div className="h-screen w-screen flex flex-col text-sm antialiased text-e2e8f0 font-sans" style={user.bgImage ? { backgroundImage: `url(${user.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { backgroundColor: '#05070e' }}>
       
-      {/* POPUP RESET (PUNTO 4) */}
+      {/* POPUP RESET */}
       {user.id && !user.hasSeenResetPopup && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm animate-fade-in">
               <div className="bg-nebula-900 border border-cyan-500 p-8 rounded-2xl max-w-lg text-center shadow-[0_0_50px_rgba(6,182,212,0.2)]">
@@ -389,10 +387,10 @@ export default function App() {
           </div>
       )}
 
-      {/* EASTER EGG DAJE ROMA */}
+      {/* EASTER EGG DAJE ROMA (IMMAGINE IMPORTATA CORRETTAMENTE) */}
       {showEasterEgg && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center pointer-events-none bg-black/80">
-              <img src="/totti.png" alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
+              <img src={tottiImg} alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
           </div>
       )}
 
@@ -667,6 +665,7 @@ export default function App() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Mio Portafoglio</h2>
               <div className="flex space-x-3">
+                <button onClick={() => setDepositModal(true)} className="px-4 py-2 bg-emerald-600 border border-emerald-500/50 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 flex items-center transition-colors"><ArrowRightCircle className="w-4 h-4 mr-2"/> Deposita</button>
                 <button onClick={() => setDiscordModal({open: true, type: 'WITHDRAW'})} className="px-4 py-2 bg-nebula-800 border border-nebula-border text-white rounded-lg text-sm font-bold hover:bg-nebula-700 flex items-center transition-colors"><Landmark className="w-4 h-4 mr-2"/> Preleva Denaro</button>
               </div>
             </div>
@@ -844,7 +843,7 @@ export default function App() {
                     <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione & Controllo Utente</h3>
                     <div className="flex space-x-4 mb-4">
                       <select value={adminUserQuery} onChange={e => setAdminUserQuery(e.target.value)} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none focus:border-cyan-500 transition-colors">
-                          <option value="">-- Seleziona un utente --</option>
+                          <option value="">-- Seleziona un utente dalla lista --</option>
                           {adminUsersList.map(u => ( <option key={u.id} value={u.id}>{u.name} ({u.id})</option> ))}
                       </select>
                       <button onClick={() => { if(adminUserQuery) socket.emit('admin_fetch_user', adminUserQuery); }} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded transition-colors">Ispeziona</button>
@@ -1012,47 +1011,61 @@ export default function App() {
                   </div>
               </div>
 
-              {/* NEBULACHANCE ADMIN */}
-              <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
-                  <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
-                  <div className="flex flex-col space-y-2 mt-2">
-                      <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      <div className="flex space-x-2">
-                          <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      </div>
-                      <div className="flex space-x-2">
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                      </div>
-                      <button onClick={() => {
-                          const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
-                          if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
-                          socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
-                          setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-                      }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
-                  </div>
+              {/* PAYWALL E GENERATORI */}
+              <div className="bg-nebula-900/60 p-6 border border-amber-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
+                  <h3 className="text-lg font-bold text-amber-500 mb-2 border-b border-amber-500/30 pb-2 flex items-center"><Key className="w-5 h-5 mr-2"/> Generatori Licenze</h3>
                   
-                  {/* Risoluzione Scommesse Attive */}
-                  {Object.values(bets).some(b => b.active) && (
-                      <div className="mt-6 border-t border-purple-500/30 pt-4">
-                          <h4 className="text-xs font-bold text-purple-300 uppercase mb-2">Risolvi Scommesse Attive</h4>
-                          {Object.values(bets).filter(b => b.active).map(bet => (
-                              <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
-                                  <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
-                                  <div className="flex space-x-2">
-                                      {bet.options.map((opt, i) => (
-                                          <button key={i} onClick={() => {
-                                              if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
-                                          }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
-                                      ))}
-                                  </div>
-                              </div>
-                          ))}
+                  {/* PAYWALL */}
+                  <div className="mb-6 bg-black/40 p-4 rounded-lg border border-amber-500/20">
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-2">Chiave Accesso Base (15.000€)</label>
+                      <div className="flex space-x-2">
+                          <button onClick={() => socket.emit('admin_action', { type: 'generate_access_key' })} className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded transition-colors">Genera Chiave Paywall</button>
+                          {adminAccessKey && <div className="flex-1 bg-black p-2 rounded text-center border border-amber-500/50 font-mono text-amber-400 text-sm select-all flex items-center justify-center">{adminAccessKey}</div>}
                       </div>
-                  )}
+                  </div>
               </div>
+            </div>
+
+            {/* NEBULACHANCE ADMIN (PUNTO 5) */}
+            <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all mb-6">
+                <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
+                <div className="flex flex-col space-y-2 mt-2">
+                    <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                    <div className="flex space-x-2">
+                        <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                        <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                        <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                    </div>
+                    <div className="flex space-x-2">
+                        <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
+                        <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
+                    </div>
+                    <button onClick={() => {
+                        const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
+                        if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
+                        socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
+                        setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
+                    }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
+                </div>
+                
+                {/* Risoluzione Scommesse Attive */}
+                {Object.values(bets).some(b => b.active) && (
+                    <div className="mt-6 border-t border-purple-500/30 pt-4">
+                        <h4 className="text-xs font-bold text-purple-300 uppercase mb-2">Risolvi Scommesse Attive</h4>
+                        {Object.values(bets).filter(b => b.active).map(bet => (
+                            <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
+                                <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
+                                <div className="flex space-x-2">
+                                    {bet.options.map((opt, i) => (
+                                        <button key={i} onClick={() => {
+                                            if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
+                                        }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* EDITOR ALGORITMO E CONTROLLO TEMPO */}
@@ -1146,6 +1159,7 @@ export default function App() {
         </main>
       </div>
 
+      {/* MODAL STORICO */}
       {depositModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-nebula-900/90 border border-emerald-500/50 rounded-2xl max-w-sm w-full p-6 relative">
@@ -1178,11 +1192,7 @@ export default function App() {
               <>
                 <div className="text-xs text-slate-400 mb-4 text-center">
                   <p className="mb-2">Prelievo Minimo: 100€</p>
-                  {(user.isPro || user.isProMax) ? (
-                      <p className="text-emerald-400 mb-2 font-bold">Vantaggio VIP: Prelievi Giornalieri Illimitati</p>
-                  ) : (
-                      <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
-                  )}
+                  <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3 text-rose-400 font-bold justify-center items-center">
                       <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 35%</span>
                   </div>
