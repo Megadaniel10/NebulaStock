@@ -11,12 +11,13 @@ import { io } from 'socket.io-client';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://grant-ringtone-personal-vsnet.trycloudflare.com"; 
+const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
 
 let socket;
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(false);
+  const [isBackendOnline, setIsBackendOnline] = useState(false); // NUOVO STATO CONNESSIONE
   const [user, setUser] = useState({ id: '', name: '', avatar: '', colorName: '#ffffff', colorText: '#cbd5e1', bgImage: '', isAdmin: false, isFinanza: false, isFrozen: false, withdrawalsToday: 0, limitOrders: [], hasSeenResetPopup: true });
   const [portfolio, setPortfolio] = useState({ cash: 3000, holdings: {} }); 
   
@@ -56,7 +57,7 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ title: '', msg: '', isBull: true });
   const [adminHoldingsEdit, setAdminHoldingsEdit] = useState({ ticker: 'SNEB', action: 'add', qty: 1 });
-  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 1000, maxPrice: 600, minPrice: 0.01, holdingTax: 0 });
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', isPro: false, isProMax: false, maxShares: 1000, maxPrice: 600, minPrice: 0.01, holdingTax: 0 });
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
   const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
@@ -77,6 +78,11 @@ export default function App() {
     socket = io(BACKEND_URL, { 
       withCredentials: true, transports: ['websocket', 'polling'], upgrade: true, reconnectionAttempts: 5, timeout: 10000
     });
+
+    // LISTENER CONNESSIONE BACKEND
+    socket.on('connect', () => setIsBackendOnline(true));
+    socket.on('disconnect', () => setIsBackendOnline(false));
+    socket.on('connect_error', () => setIsBackendOnline(false));
 
     socket.on('market_init', (data) => {
       setAssets(data.assets || {}); setGameTime(data.gameTime || { day: 1, hours: 9, minutes: 0, isExtraordinary: false }); setChatHistory(prev => ({ ...prev, global: data.chat?.global || [] }));
@@ -113,6 +119,11 @@ export default function App() {
     socket.on('admin_users_list', (list) => setAdminUsersList(list));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
+    
+    socket.on('admin_promo_generated', ({ code, label }) => {
+        setAdminPromo(p => ({ ...p, generatedCode: code, label }));
+        showToast(`Codice Generato (${label})`, 'success');
+    });
 
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
       setDiscordModal({ open: true, type: 'WITHDRAW_SUCCESS', code, netAmount, taxAmount, rate });
@@ -162,6 +173,7 @@ export default function App() {
     if (tabId === 'admin') { 
         socket.emit('admin_fetch_db'); 
         socket.emit('admin_fetch_logs'); 
+        socket.emit('admin_fetch_risk_accounts'); 
         socket.emit('admin_fetch_users_list');
     }
   };
@@ -310,16 +322,28 @@ export default function App() {
         <div className="w-full max-w-md flex flex-col justify-center p-10 z-10 relative">
             <div className="bg-nebula-900/80 border border-nebula-border backdrop-blur-xl p-10 rounded-3xl shadow-2xl w-full text-center">
               <Lock className="w-16 h-16 text-cyan-500 mx-auto mb-6" />
+              
+              {/* INDICATORE STATO SERVER */}
+              <div className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold mb-4 border ${isBackendOnline ? 'bg-emerald-900/30 border-emerald-500/50 text-emerald-400' : 'bg-rose-900/30 border-rose-500/50 text-rose-400'}`}>
+                  <span className={`w-2 h-2 rounded-full ${isBackendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                  <span>{isBackendOnline ? 'Sistema Online' : 'Server Offline'}</span>
+              </div>
+
               <h1 className="text-3xl font-black text-white mb-2 tracking-tight">NEBULA <span className="text-cyan-500">TERMINAL</span></h1>
               <p className="text-slate-400 text-sm mb-8">Piattaforma di simulazione finanziaria ufficiale.</p>
               
-              <button onClick={() => window.location.href = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=identify`} className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold py-4 px-4 rounded-xl transition-transform hover:scale-105 shadow-[0_0_20px_rgba(88,101,242,0.4)] mb-4">
+              <button onClick={() => window.location.href = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=identify`} className="w-full flex items-center justify-center space-x-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold py-4 px-4 rounded-xl transition-transform hover:scale-105 shadow-[0_0_20px_rgba(88,101,242,0.4)] mb-4 disabled:opacity-50 disabled:hover:scale-100" disabled={!isBackendOnline}>
                 <MessageCircle className="w-5 h-5" /><span>Accedi con Discord</span>
               </button>
 
-              <button onClick={() => window.open('https://discord.gg/3g3bRnYXz7', '_blank')} className="w-full flex items-center justify-center space-x-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors border border-nebula-border">
-                <span>Entra nel nostro Discord</span>
-              </button>
+              <div className="flex space-x-2">
+                  <button onClick={() => window.open('https://discord.gg/3g3bRnYXz7', '_blank')} className="flex-1 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-2 rounded-xl transition-colors border border-nebula-border text-xs">
+                      <span>Server Discord</span>
+                  </button>
+                  <button onClick={() => window.open('https://urbanrp.it', '_blank')} className="flex-1 flex items-center justify-center bg-indigo-900/50 hover:bg-indigo-800/80 text-indigo-300 font-bold py-3 px-2 rounded-xl transition-colors border border-indigo-500/30 text-xs">
+                      <Globe className="w-4 h-4 mr-2" /><span>Sito Urban RP</span>
+                  </button>
+              </div>
             </div>
         </div>
         
@@ -365,7 +389,7 @@ export default function App() {
           </div>
       )}
 
-      {/* EASTER EGG DAJE ROMA (PUNTO 8) */}
+      {/* EASTER EGG DAJE ROMA */}
       {showEasterEgg && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center pointer-events-none bg-black/80">
               <img src="/totti.png" alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
@@ -624,7 +648,7 @@ export default function App() {
                               <div key={o.id} className="flex items-center justify-between bg-nebula-950 border border-nebula-border p-2 rounded text-xs font-mono transition-all">
                                   <div>
                                       <span className={`font-bold mr-2 ${o.type === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>AUTO-{o.type}</span>
-                                      <span className="text-white">{o.qty} pz</span> se {o.type === 'BUY' ? '<=' : '>='} <span className="text-cyan-400">{formatCurrency(o.targetPrice)}</span>
+                                      <span className="text-white">{o.qty} pz</span> se {o.condition === 'LESS' ? '<=' : '>='} <span className="text-cyan-400">{formatCurrency(o.targetPrice)}</span>
                                   </div>
                                   <button onClick={() => cancelLimitOrder(o.id)} className="text-slate-500 hover:text-rose-400 transition-colors"><X className="w-4 h-4"/></button>
                               </div>
@@ -638,7 +662,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB PORTFOLIO & PRELIEVI (Semplificato) */}
+          {/* TAB PORTFOLIO & BANCA */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'portfolio' ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Mio Portafoglio</h2>
@@ -804,7 +828,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB ADMIN E FINANZA (PUNTO 10) */}
+          {/* TAB ADMIN E FINANZA */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'admin' && (user.isAdmin || user.isFinanza) ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black flex items-center gap-3">
@@ -820,7 +844,7 @@ export default function App() {
                     <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione & Controllo Utente</h3>
                     <div className="flex space-x-4 mb-4">
                       <select value={adminUserQuery} onChange={e => setAdminUserQuery(e.target.value)} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none focus:border-cyan-500 transition-colors">
-                          <option value="">-- Seleziona un utente dalla lista --</option>
+                          <option value="">-- Seleziona un utente --</option>
                           {adminUsersList.map(u => ( <option key={u.id} value={u.id}>{u.name} ({u.id})</option> ))}
                       </select>
                       <button onClick={() => { if(adminUserQuery) socket.emit('admin_fetch_user', adminUserQuery); }} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded transition-colors">Ispeziona</button>
@@ -864,14 +888,15 @@ export default function App() {
                                         <option value="add">Aggiungi (+)</option>
                                         <option value="sub">Rimuovi (-)</option>
                                         <option value="set">Imposta a (=)</option>
+                                        <option value="reset">Reset</option>
                                     </select>
-                                    <input type="number" step="any" value={adminCash.amount} onChange={e => setAdminCash({...adminCash, amount: e.target.value})} className="w-24 bg-nebula-900 border border-nebula-border rounded px-2 text-white font-mono outline-none text-xs" />
+                                    <input type="number" step="any" disabled={adminCash.action === 'reset'} value={adminCash.amount} onChange={e => setAdminCash({...adminCash, amount: e.target.value})} className="w-24 bg-nebula-900 border border-nebula-border rounded px-2 text-white font-mono outline-none text-xs disabled:opacity-50" />
                                     <button onClick={() => socket.emit('admin_action', { type: 'cash', userId: adminFetchedUser.id, action: adminCash.action, amount: parseFloat(adminCash.amount) })} className="px-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded text-xs transition-colors">Esegui</button>
                                 </div>
                             </div>
 
                             <div className="bg-black/40 p-4 rounded-lg border border-nebula-border">
-                                <h4 className="text-xs uppercase font-bold text-slate-400 mb-3 flex items-center"><LineChart className="w-3 h-3 mr-2"/> Azioni Utente</h4>
+                                <h4 className="text-xs uppercase font-bold text-slate-400 mb-3 flex items-center"><LineChart className="w-3 h-3 mr-2"/> Gestione Azioni (Holdings)</h4>
                                 <div className="flex space-x-2">
                                     <select value={adminHoldingsEdit.ticker} onChange={e => setAdminHoldingsEdit({...adminHoldingsEdit, ticker: e.target.value})} className="flex-1 bg-nebula-900 border border-nebula-border rounded px-2 text-white text-xs outline-none">
                                         {Object.keys(assets || {}).map(k => <option key={k} value={k}>{k}</option>)}
@@ -894,6 +919,7 @@ export default function App() {
                                 <span className="font-mono text-cyan-400">{h.shares} <span className="text-[10px] text-slate-500">pz</span></span>
                               </div>
                             ))}
+                            {Object.keys(adminFetchedUser.holdings || {}).length === 0 && <div className="text-xs text-slate-500 col-span-4">Nessun asset in portafoglio.</div>}
                           </div>
                         </div>
                       </div>
@@ -953,7 +979,7 @@ export default function App() {
                 </div>
             </div>
 
-            {/* SEZIONI ESCLUSIVE ADMIN (Non finanza) PUNTO 10*/}
+            {/* SEZIONI ESCLUSIVE ADMIN (Non finanza) */}
             {user.isAdmin && (
             <>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -986,7 +1012,7 @@ export default function App() {
                   </div>
               </div>
 
-              {/* NEBULACHANCE ADMIN (PUNTO 5) */}
+              {/* NEBULACHANCE ADMIN */}
               <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
                   <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
                   <div className="flex flex-col space-y-2 mt-2">
@@ -1029,125 +1055,88 @@ export default function App() {
               </div>
             </div>
 
-            {/* EDITOR ALGORITMO */}
-            <div className="mb-6 bg-nebula-900/60 p-6 border border-indigo-500/30 rounded-xl backdrop-blur-md transition-all">
-                <h3 className="text-lg font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-2 flex items-center justify-between">
-                    <span className="flex items-center"><Settings className="w-5 h-5 mr-2"/> Editor Avanzato Algoritmo</span>
-                    <button onClick={showAlgoGuide} className="text-[10px] bg-indigo-900/50 text-indigo-300 px-3 py-1 rounded hover:bg-indigo-900 transition-colors">? Guida</button>
-                </h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <div className="mb-4">
-                            <label className="text-xs text-slate-400 block mb-1">Moltiplicatore Globale Volatilità (Default: 1.0)</label>
-                            <input type="number" step="0.1" value={adminAlgoInput.volMult} onChange={e => setAdminAlgoInput({...adminAlgoInput, volMult: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
-                        </div>
-                        <div className="mb-4">
-                            <label className="text-xs text-slate-400 block mb-1">Bias di Drift Globale (+ per bull, - per bear. Default: 0.0)</label>
-                            <input type="number" step="0.0001" value={adminAlgoInput.driftOffset} onChange={e => setAdminAlgoInput({...adminAlgoInput, driftOffset: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
-                        </div>
-                        <div className="flex space-x-2 mb-4">
-                            <button onClick={() => setAdminAlgoInput({volMult: 1.0, driftOffset: 0.0})} className="flex-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-white rounded py-1 transition-colors">Standard</button>
-                            <button onClick={() => setAdminAlgoInput({volMult: 2.5, driftOffset: 0.0})} className="flex-1 text-[10px] bg-amber-700 hover:bg-amber-600 text-white rounded py-1 transition-colors">Alta Volatilità</button>
-                            <button onClick={() => setAdminAlgoInput({volMult: 0.8, driftOffset: 0.005})} className="flex-1 text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white rounded py-1 transition-colors">Bull Lento</button>
-                            <button onClick={() => setAdminAlgoInput({volMult: 1.8, driftOffset: -0.008})} className="flex-1 text-[10px] bg-rose-700 hover:bg-rose-600 text-white rounded py-1 transition-colors">Crollo (Bear)</button>
-                        </div>
-                        <button onClick={() => socket.emit('admin_action', { type: 'update_algo', volMult: adminAlgoInput.volMult, driftOffset: adminAlgoInput.driftOffset })} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded text-xs transition-colors">Applica al Server</button>
-                    </div>
-                    
-                    <div className="flex flex-col">
-                        <label className="text-xs text-slate-400 block mb-2">Anteprima Mini-Simulazione (Base 100€, 60 Tick Live)</label>
-                        <div className="flex-1">
-                            {renderAlgoPreview()}
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-2 italic text-center">L'anteprima si anima costantemente e reagisce ai parametri inseriti qui a sinistra.</p>
-                    </div>
-                </div>
-            </div>
-            
+            {/* EDITOR ALGORITMO E CONTROLLO TEMPO */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server & Velocità</h3>
+                <div className="bg-nebula-900/60 p-6 border border-indigo-500/30 rounded-xl backdrop-blur-md transition-all">
+                    <h3 className="text-lg font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-2 flex items-center justify-between">
+                        <span className="flex items-center"><Settings className="w-5 h-5 mr-2"/> Editor Avanzato Algoritmo</span>
+                        <button onClick={showAlgoGuide} className="text-[10px] bg-indigo-900/50 text-indigo-300 px-3 py-1 rounded hover:bg-indigo-900 transition-colors">? Guida</button>
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <div className="mb-4">
+                                <label className="text-xs text-slate-400 block mb-1">Moltiplicatore Globale Volatilità (Default: 1.0)</label>
+                                <input type="number" step="0.1" value={adminAlgoInput.volMult} onChange={e => setAdminAlgoInput({...adminAlgoInput, volMult: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
+                            </div>
+                            <div className="mb-4">
+                                <label className="text-xs text-slate-400 block mb-1">Bias di Drift Globale (+ per bull, - per bear. Default: 0.0)</label>
+                                <input type="number" step="0.0001" value={adminAlgoInput.driftOffset} onChange={e => setAdminAlgoInput({...adminAlgoInput, driftOffset: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
+                            </div>
+                            <div className="flex space-x-2 mb-4">
+                                <button onClick={() => setAdminAlgoInput({volMult: 1.0, driftOffset: 0.0})} className="flex-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-white rounded py-1 transition-colors">Standard</button>
+                                <button onClick={() => setAdminAlgoInput({volMult: 2.5, driftOffset: 0.0})} className="flex-1 text-[10px] bg-amber-700 hover:bg-amber-600 text-white rounded py-1 transition-colors">Alta Volatilità</button>
+                                <button onClick={() => setAdminAlgoInput({volMult: 0.8, driftOffset: 0.005})} className="flex-1 text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white rounded py-1 transition-colors">Bull Lento</button>
+                                <button onClick={() => setAdminAlgoInput({volMult: 1.8, driftOffset: -0.008})} className="flex-1 text-[10px] bg-rose-700 hover:bg-rose-600 text-white rounded py-1 transition-colors">Crollo (Bear)</button>
+                            </div>
+                            <button onClick={() => socket.emit('admin_action', { type: 'update_algo', volMult: adminAlgoInput.volMult, driftOffset: adminAlgoInput.driftOffset })} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors">Applica al Server</button>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                            <label className="text-xs text-slate-400 block mb-2">Anteprima Mini-Simulazione (Base 100€, 60 Tick Live)</label>
+                            <div className="flex-1">
+                                {renderAlgoPreview()}
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-2 italic text-center">L'anteprima si anima costantemente e reagisce ai parametri inseriti qui a sinistra.</p>
+                        </div>
+                    </div>
+                </div>
                 
-                <div className="flex items-center space-x-4 mb-4">
-                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza Orario</button></div>
-                </div>
+                <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
+                  <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server & Velocità</h3>
+                  
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                    <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                    <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza Orario</button></div>
+                  </div>
 
-                <div className="flex items-center space-x-4 border-t border-rose-900/50 pt-4">
-                  <div>
-                    <label className="text-xs text-slate-400 block mb-1">Velocità Tick (ms)</label>
-                    <input type="number" value={adminTickRate} onChange={e => setAdminTickRate(e.target.value)} min="100" className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-24 outline-none" />
-                  </div>
-                  <div className="flex items-end h-full pt-5">
-                    <button onClick={() => socket.emit('admin_action', { type: 'set_tick_rate', ms: adminTickRate })} className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Velocità</button>
+                  <div className="flex items-center space-x-4 border-t border-rose-900/50 pt-4">
+                    <div>
+                      <label className="text-xs text-slate-400 block mb-1">Velocità Tick (ms)</label>
+                      <input type="number" value={adminTickRate} onChange={e => setAdminTickRate(e.target.value)} min="100" className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-24 outline-none" />
+                    </div>
+                    <div className="flex items-end h-full pt-5">
+                      <button onClick={() => socket.emit('admin_action', { type: 'set_tick_rate', ms: adminTickRate })} className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Velocità</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {dbBackupInfo && dbBackupInfo.funds && (
-                  <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.1)] transition-all">
-                      <h3 className="text-lg font-bold text-white mb-2 border-b border-emerald-900/50 pb-2 flex items-center"><Landmark className="w-5 h-5 mr-2 text-emerald-500"/> Gestione Fondi Tassazione</h3>
-                      <div className="grid grid-cols-1 gap-4">
-                          <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
-                              <div>
-                              <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
-                              <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
-                              </div>
-                              <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition-colors">Preleva</button>
-                          </div>
-                      </div>
-                  </div>
-              )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Modifica Parametri Asset (Live)</h3>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div className="col-span-2"><label className="text-xs text-slate-400 block mb-1">Seleziona Asset</label><select value={adminPriceEdit.ticker} onChange={e => setAdminPriceEdit({ ...adminPriceEdit, ticker: e.target.value })} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">{Object.keys(assets || {}).map(k => <option key={k} value={k}>{k}</option>)}</select></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Forza Prezzo (€)</label><input type="number" step="any" id="adm-prc" className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Volatilità Base</label><input type="number" step="any" value={adminPriceEdit.vol} onChange={e=>setAdminPriceEdit({...adminPriceEdit, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" placeholder="Es. 0.02" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Limite Max Azioni</label><input type="number" value={adminPriceEdit.maxShares} onChange={e=>setAdminPriceEdit({...adminPriceEdit, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={adminPriceEdit.holdingTax} onChange={e=>setAdminPriceEdit({...adminPriceEdit, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo MAX (Tetto)</label><input type="number" value={adminPriceEdit.maxPrice} onChange={e=>setAdminPriceEdit({...adminPriceEdit, maxPrice: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo MIN (Pavimento)</label><input type="number" step="any" value={adminPriceEdit.minPrice} onChange={e=>setAdminPriceEdit({...adminPriceEdit, minPrice: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                </div>
-                <div className="grid grid-cols-4 gap-2 border-t border-rose-900/50 pt-4">
-                  <button onClick={() => {
-                    if(document.getElementById('adm-prc').value) socket.emit('admin_action', { type: 'price', ticker: adminPriceEdit.ticker, price: parseFloat(document.getElementById('adm-prc').value) });
-                    socket.emit('admin_action', { type: 'edit_asset', ticker: adminPriceEdit.ticker, updates: { vol: adminPriceEdit.vol, maxShares: adminPriceEdit.maxShares, maxPrice: adminPriceEdit.maxPrice, minPrice: adminPriceEdit.minPrice, holdingTax: adminPriceEdit.holdingTax } });
-                  }} className="col-span-2 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-xs transition-colors">Aggiorna Asset</button>
-                  <button onClick={() => socket.emit('admin_action', { type: 'reset_chart', ticker: adminPriceEdit.ticker })} className="col-span-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded text-xs flex items-center justify-center transition-colors"><RefreshCw className="w-3 h-3 mr-1"/> Reset</button>
-                </div>
+            <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all mb-6">
+              <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option></select></div>
+                <div><label className="text-xs text-slate-400 block mb-1">Ticker (Es. AAPL)</label><input type="text" maxLength="5" value={newAsset.ticker} onChange={e => setNewAsset({...newAsset, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm uppercase outline-none" /></div>
+                <div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">Nome Completo</label><input type="text" value={newAsset.name} onChange={e => setNewAsset({...newAsset, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                
+                <div><label className="text-xs text-slate-400 block mb-1">Prezzo Iniziale (€)</label><input type="number" step="0.1" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                <div><label className="text-xs text-slate-400 block mb-1">Volatilità (Es. 0.02)</label><input type="number" step="0.01" value={newAsset.vol} onChange={e => setNewAsset({...newAsset, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                <div><label className="text-xs text-slate-400 block mb-1">Limite Azioni Globale</label><input type="number" value={newAsset.maxShares} onChange={e => setNewAsset({...newAsset, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={newAsset.holdingTax} onChange={e => setNewAsset({...newAsset, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                
+                <div><label className="text-xs text-slate-400 block mb-1">Settore</label><input type="text" value={newAsset.sector} onChange={e => setNewAsset({...newAsset, sector: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                <div><label className="text-xs text-slate-400 block mb-1">Market Cap</label><input type="text" value={newAsset.mcap} onChange={e => setNewAsset({...newAsset, mcap: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                <div><label className="text-xs text-slate-400 block mb-1">CEO</label><input type="text" value={newAsset.ceo} onChange={e => setNewAsset({...newAsset, ceo: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                <div><label className="text-xs text-slate-400 block mb-1">Dipendenti</label><input type="text" value={newAsset.employees} onChange={e => setNewAsset({...newAsset, employees: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                
+                <div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">Descrizione Lunga</label><input type="text" value={newAsset.desc} onChange={e => setNewAsset({...newAsset, desc: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
               </div>
-
-              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
-                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option></select></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Ticker (Es. AAPL)</label><input type="text" maxLength="5" value={newAsset.ticker} onChange={e => setNewAsset({...newAsset, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm uppercase outline-none" /></div>
-                  <div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">Nome Completo</label><input type="text" value={newAsset.name} onChange={e => setNewAsset({...newAsset, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  
-                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo Iniziale (€)</label><input type="number" step="0.1" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Volatilità (Es. 0.02)</label><input type="number" step="0.01" value={newAsset.vol} onChange={e => setNewAsset({...newAsset, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Limite Azioni Globale</label><input type="number" value={newAsset.maxShares} onChange={e => setNewAsset({...newAsset, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={newAsset.holdingTax} onChange={e => setNewAsset({...newAsset, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  
-                  <div><label className="text-xs text-slate-400 block mb-1">Settore</label><input type="text" value={newAsset.sector} onChange={e => setNewAsset({...newAsset, sector: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Market Cap</label><input type="text" value={newAsset.mcap} onChange={e => setNewAsset({...newAsset, mcap: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">CEO</label><input type="text" value={newAsset.ceo} onChange={e => setNewAsset({...newAsset, ceo: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  <div><label className="text-xs text-slate-400 block mb-1">Dipendenti</label><input type="text" value={newAsset.employees} onChange={e => setNewAsset({...newAsset, employees: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  
-                  <div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">Descrizione Lunga</label><input type="text" value={newAsset.desc} onChange={e => setNewAsset({...newAsset, desc: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                </div>
-                <button onClick={() => {
-                  if (!newAsset.ticker || !newAsset.name) return showToast("Compila almeno Ticker e Nome.", "error");
-                  socket.emit('admin_action', { type: 'ipo', asset: newAsset });
-                  showToast("Lancio IPO effettuato sul server centrale.", "success");
-                }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
-              </div>
+              <button onClick={() => {
+                if (!newAsset.ticker || !newAsset.name) return showToast("Compila almeno Ticker e Nome.", "error");
+                socket.emit('admin_action', { type: 'ipo', asset: newAsset });
+                showToast("Lancio IPO effettuato sul server centrale.", "success");
+              }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
             </div>
             </>
             )}
@@ -1157,7 +1146,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* MODAL STORICO */}
       {depositModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-nebula-900/90 border border-emerald-500/50 rounded-2xl max-w-sm w-full p-6 relative">
@@ -1190,7 +1178,11 @@ export default function App() {
               <>
                 <div className="text-xs text-slate-400 mb-4 text-center">
                   <p className="mb-2">Prelievo Minimo: 100€</p>
-                  <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
+                  {(user.isPro || user.isProMax) ? (
+                      <p className="text-emerald-400 mb-2 font-bold">Vantaggio VIP: Prelievi Giornalieri Illimitati</p>
+                  ) : (
+                      <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
+                  )}
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3 text-rose-400 font-bold justify-center items-center">
                       <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 35%</span>
                   </div>
