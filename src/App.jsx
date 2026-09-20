@@ -14,7 +14,7 @@ import tottiImg from './totti.png';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://call-subscribers-linda-cycling.trycloudflare.com"; 
+const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
 
 let socket;
 
@@ -64,6 +64,7 @@ export default function App() {
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
   const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
+  const [adminPromo, setAdminPromo] = useState({ tier: 'PRO', duration: 30, unit: 'days', generatedCode: '', label: '' });
 
   const [previewPts, setPreviewPts] = useState(Array(60).fill(100));
   const previewMomentum = useRef(0);
@@ -122,6 +123,11 @@ export default function App() {
     socket.on('admin_users_list', (list) => setAdminUsersList(list));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
+    
+    socket.on('admin_promo_generated', ({ code, label }) => {
+        setAdminPromo(p => ({ ...p, generatedCode: code, label }));
+        showToast(`Codice Generato (${label})`, 'success');
+    });
 
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
       setDiscordModal({ open: true, type: 'WITHDRAW_SUCCESS', code, netAmount, taxAmount, rate });
@@ -171,7 +177,6 @@ export default function App() {
     if (tabId === 'admin') { 
         socket.emit('admin_fetch_db'); 
         socket.emit('admin_fetch_logs'); 
-        socket.emit('admin_fetch_risk_accounts'); 
         socket.emit('admin_fetch_users_list');
     }
   };
@@ -387,7 +392,7 @@ export default function App() {
           </div>
       )}
 
-      {/* EASTER EGG DAJE ROMA (IMMAGINE IMPORTATA CORRETTAMENTE) */}
+      {/* EASTER EGG DAJE ROMA */}
       {showEasterEgg && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center pointer-events-none bg-black/80">
               <img src={tottiImg} alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
@@ -660,7 +665,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB PORTFOLIO & BANCA */}
+          {/* TAB PORTFOLIO */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'portfolio' ? 'flex' : 'hidden'}`}>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Mio Portafoglio</h2>
@@ -693,7 +698,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB NEBULACHANCE (SCOMMESSE - PUNTO 5) */}
+          {/* TAB NEBULACHANCE (SCOMMESSE) */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'chance' ? 'flex' : 'hidden'}`}>
              <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 flex items-center"><Ticket className="w-6 h-6 mr-3 text-purple-500"/> NebulaChance</h2>
@@ -843,7 +848,7 @@ export default function App() {
                     <h3 className="text-lg font-bold text-white mb-4 border-b border-cyan-900/50 pb-2 flex items-center"><Search className="w-5 h-5 mr-2 text-cyan-500"/> Ispezione & Controllo Utente</h3>
                     <div className="flex space-x-4 mb-4">
                       <select value={adminUserQuery} onChange={e => setAdminUserQuery(e.target.value)} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none focus:border-cyan-500 transition-colors">
-                          <option value="">-- Seleziona un utente dalla lista --</option>
+                          <option value="">-- Seleziona un utente --</option>
                           {adminUsersList.map(u => ( <option key={u.id} value={u.id}>{u.name} ({u.id})</option> ))}
                       </select>
                       <button onClick={() => { if(adminUserQuery) socket.emit('admin_fetch_user', adminUserQuery); }} className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded transition-colors">Ispeziona</button>
@@ -918,7 +923,6 @@ export default function App() {
                                 <span className="font-mono text-cyan-400">{h.shares} <span className="text-[10px] text-slate-500">pz</span></span>
                               </div>
                             ))}
-                            {Object.keys(adminFetchedUser.holdings || {}).length === 0 && <div className="text-xs text-slate-500 col-span-4">Nessun asset in portafoglio.</div>}
                           </div>
                         </div>
                       </div>
@@ -1011,61 +1015,47 @@ export default function App() {
                   </div>
               </div>
 
-              {/* PAYWALL E GENERATORI */}
-              <div className="bg-nebula-900/60 p-6 border border-amber-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
-                  <h3 className="text-lg font-bold text-amber-500 mb-2 border-b border-amber-500/30 pb-2 flex items-center"><Key className="w-5 h-5 mr-2"/> Generatori Licenze</h3>
-                  
-                  {/* PAYWALL */}
-                  <div className="mb-6 bg-black/40 p-4 rounded-lg border border-amber-500/20">
-                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-2">Chiave Accesso Base (15.000€)</label>
+              {/* NEBULACHANCE ADMIN */}
+              <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
+                  <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
+                  <div className="flex flex-col space-y-2 mt-2">
+                      <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
                       <div className="flex space-x-2">
-                          <button onClick={() => socket.emit('admin_action', { type: 'generate_access_key' })} className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded transition-colors">Genera Chiave Paywall</button>
-                          {adminAccessKey && <div className="flex-1 bg-black p-2 rounded text-center border border-amber-500/50 font-mono text-amber-400 text-sm select-all flex items-center justify-center">{adminAccessKey}</div>}
+                          <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                          <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                          <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
                       </div>
+                      <div className="flex space-x-2">
+                          <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
+                          <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
+                      </div>
+                      <button onClick={() => {
+                          const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
+                          if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
+                          socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
+                          setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
+                      }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
                   </div>
+                  
+                  {/* Risoluzione Scommesse Attive */}
+                  {Object.values(bets).some(b => b.active) && (
+                      <div className="mt-6 border-t border-purple-500/30 pt-4">
+                          <h4 className="text-xs font-bold text-purple-300 uppercase mb-2">Risolvi Scommesse Attive</h4>
+                          {Object.values(bets).filter(b => b.active).map(bet => (
+                              <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
+                                  <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
+                                  <div className="flex space-x-2">
+                                      {bet.options.map((opt, i) => (
+                                          <button key={i} onClick={() => {
+                                              if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
+                                          }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
+                                      ))}
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  )}
               </div>
-            </div>
-
-            {/* NEBULACHANCE ADMIN (PUNTO 5) */}
-            <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all mb-6">
-                <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
-                <div className="flex flex-col space-y-2 mt-2">
-                    <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                    <div className="flex space-x-2">
-                        <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                        <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                        <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                    </div>
-                    <div className="flex space-x-2">
-                        <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                        <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                    </div>
-                    <button onClick={() => {
-                        const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
-                        if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
-                        socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
-                        setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-                    }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
-                </div>
-                
-                {/* Risoluzione Scommesse Attive */}
-                {Object.values(bets).some(b => b.active) && (
-                    <div className="mt-6 border-t border-purple-500/30 pt-4">
-                        <h4 className="text-xs font-bold text-purple-300 uppercase mb-2">Risolvi Scommesse Attive</h4>
-                        {Object.values(bets).filter(b => b.active).map(bet => (
-                            <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
-                                <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
-                                <div className="flex space-x-2">
-                                    {bet.options.map((opt, i) => (
-                                        <button key={i} onClick={() => {
-                                            if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
-                                        }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
             </div>
 
             {/* EDITOR ALGORITMO E CONTROLLO TEMPO */}
@@ -1126,30 +1116,52 @@ export default function App() {
                 </div>
             </div>
 
-            <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all mb-6">
-              <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option></select></div>
-                <div><label className="text-xs text-slate-400 block mb-1">Ticker (Es. AAPL)</label><input type="text" maxLength="5" value={newAsset.ticker} onChange={e => setNewAsset({...newAsset, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm uppercase outline-none" /></div>
-                <div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">Nome Completo</label><input type="text" value={newAsset.name} onChange={e => setNewAsset({...newAsset, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                
-                <div><label className="text-xs text-slate-400 block mb-1">Prezzo Iniziale (€)</label><input type="number" step="0.1" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                <div><label className="text-xs text-slate-400 block mb-1">Volatilità (Es. 0.02)</label><input type="number" step="0.01" value={newAsset.vol} onChange={e => setNewAsset({...newAsset, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                <div><label className="text-xs text-slate-400 block mb-1">Limite Azioni Globale</label><input type="number" value={newAsset.maxShares} onChange={e => setNewAsset({...newAsset, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={newAsset.holdingTax} onChange={e => setNewAsset({...newAsset, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                
-                <div><label className="text-xs text-slate-400 block mb-1">Settore</label><input type="text" value={newAsset.sector} onChange={e => setNewAsset({...newAsset, sector: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                <div><label className="text-xs text-slate-400 block mb-1">Market Cap</label><input type="text" value={newAsset.mcap} onChange={e => setNewAsset({...newAsset, mcap: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                <div><label className="text-xs text-slate-400 block mb-1">CEO</label><input type="text" value={newAsset.ceo} onChange={e => setNewAsset({...newAsset, ceo: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                <div><label className="text-xs text-slate-400 block mb-1">Dipendenti</label><input type="text" value={newAsset.employees} onChange={e => setNewAsset({...newAsset, employees: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                
-                <div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">Descrizione Lunga</label><input type="text" value={newAsset.desc} onChange={e => setNewAsset({...newAsset, desc: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Modifica Parametri Asset (Live)</h3>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="col-span-2"><label className="text-xs text-slate-400 block mb-1">Seleziona Asset</label><select value={adminPriceEdit.ticker} onChange={e => setAdminPriceEdit({ ...adminPriceEdit, ticker: e.target.value })} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">{Object.keys(assets || {}).map(k => <option key={k} value={k}>{k}</option>)}</select></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Forza Prezzo (€)</label><input type="number" step="any" id="adm-prc" className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Volatilità Base</label><input type="number" step="any" value={adminPriceEdit.vol} onChange={e=>setAdminPriceEdit({...adminPriceEdit, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" placeholder="Es. 0.02" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Limite Max Azioni</label><input type="number" value={adminPriceEdit.maxShares} onChange={e=>setAdminPriceEdit({...adminPriceEdit, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={adminPriceEdit.holdingTax} onChange={e=>setAdminPriceEdit({...adminPriceEdit, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo MAX (Tetto)</label><input type="number" value={adminPriceEdit.maxPrice} onChange={e=>setAdminPriceEdit({...adminPriceEdit, maxPrice: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo MIN (Pavimento)</label><input type="number" step="any" value={adminPriceEdit.minPrice} onChange={e=>setAdminPriceEdit({...adminPriceEdit, minPrice: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
+                </div>
+                <div className="grid grid-cols-4 gap-2 border-t border-rose-900/50 pt-4">
+                  <button onClick={() => {
+                    if(document.getElementById('adm-prc').value) socket.emit('admin_action', { type: 'price', ticker: adminPriceEdit.ticker, price: parseFloat(document.getElementById('adm-prc').value) });
+                    socket.emit('admin_action', { type: 'edit_asset', ticker: adminPriceEdit.ticker, updates: { vol: adminPriceEdit.vol, maxShares: adminPriceEdit.maxShares, maxPrice: adminPriceEdit.maxPrice, minPrice: adminPriceEdit.minPrice, holdingTax: adminPriceEdit.holdingTax } });
+                  }} className="col-span-2 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-xs transition-colors">Aggiorna Asset</button>
+                  <button onClick={() => socket.emit('admin_action', { type: 'reset_chart', ticker: adminPriceEdit.ticker })} className="col-span-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded text-xs flex items-center justify-center transition-colors"><RefreshCw className="w-3 h-3 mr-1"/> Reset</button>
+                </div>
               </div>
-              <button onClick={() => {
-                if (!newAsset.ticker || !newAsset.name) return showToast("Compila almeno Ticker e Nome.", "error");
-                socket.emit('admin_action', { type: 'ipo', asset: newAsset });
-                showToast("Lancio IPO effettuato sul server centrale.", "success");
-              }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
+
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option></select></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Ticker (Es. AAPL)</label><input type="text" maxLength="5" value={newAsset.ticker} onChange={e => setNewAsset({...newAsset, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm uppercase outline-none" /></div>
+                  <div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">Nome Completo</label><input type="text" value={newAsset.name} onChange={e => setNewAsset({...newAsset, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  
+                  <div><label className="text-xs text-slate-400 block mb-1">Prezzo Iniziale (€)</label><input type="number" step="0.1" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Volatilità (Es. 0.02)</label><input type="number" step="0.01" value={newAsset.vol} onChange={e => setNewAsset({...newAsset, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Limite Azioni Globale</label><input type="number" value={newAsset.maxShares} onChange={e => setNewAsset({...newAsset, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={newAsset.holdingTax} onChange={e => setNewAsset({...newAsset, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  
+                  <div><label className="text-xs text-slate-400 block mb-1">Settore</label><input type="text" value={newAsset.sector} onChange={e => setNewAsset({...newAsset, sector: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Market Cap</label><input type="text" value={newAsset.mcap} onChange={e => setNewAsset({...newAsset, mcap: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">CEO</label><input type="text" value={newAsset.ceo} onChange={e => setNewAsset({...newAsset, ceo: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Dipendenti</label><input type="text" value={newAsset.employees} onChange={e => setNewAsset({...newAsset, employees: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                  
+                  <div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">Descrizione Lunga</label><input type="text" value={newAsset.desc} onChange={e => setNewAsset({...newAsset, desc: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
+                </div>
+                <button onClick={() => {
+                  if (!newAsset.ticker || !newAsset.name) return showToast("Compila almeno Ticker e Nome.", "error");
+                  socket.emit('admin_action', { type: 'ipo', asset: newAsset });
+                  showToast("Lancio IPO effettuato sul server centrale.", "success");
+                }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
+              </div>
             </div>
             </>
             )}
@@ -1159,7 +1171,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* MODAL STORICO */}
       {depositModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-nebula-900/90 border border-emerald-500/50 rounded-2xl max-w-sm w-full p-6 relative">
