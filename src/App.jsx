@@ -9,12 +9,11 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
-// IMPORTA L'IMMAGINE DALLA CARTELLA SRC
 import tottiImg from './totti.png';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://superb-controversial-spies-auto.trycloudflare.com"; 
+const BACKEND_URL = "https://miracle-varieties-beyond-excitement.trycloudflare.com"; 
 
 let socket;
 
@@ -64,7 +63,7 @@ export default function App() {
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
   const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-  const [adminPromo, setAdminPromo] = useState({ tier: 'PRO', duration: 30, unit: 'days', generatedCode: '', label: '' });
+  const [riskAccounts, setRiskAccounts] = useState([]);
 
   const [previewPts, setPreviewPts] = useState(Array(60).fill(100));
   const previewMomentum = useRef(0);
@@ -83,7 +82,6 @@ export default function App() {
       withCredentials: true, transports: ['websocket', 'polling'], upgrade: true, reconnectionAttempts: 5, timeout: 10000
     });
 
-    // LISTENER CONNESSIONE BACKEND
     socket.on('connect', () => setIsBackendOnline(true));
     socket.on('disconnect', () => setIsBackendOnline(false));
     socket.on('connect_error', () => setIsBackendOnline(false));
@@ -121,13 +119,9 @@ export default function App() {
     
     socket.on('admin_logs_data', (logs) => { setAdminLogs(logs.reverse()); });
     socket.on('admin_users_list', (list) => setAdminUsersList(list));
+    socket.on('admin_risk_accounts_data', (data) => setRiskAccounts(data));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
-    
-    socket.on('admin_promo_generated', ({ code, label }) => {
-        setAdminPromo(p => ({ ...p, generatedCode: code, label }));
-        showToast(`Codice Generato (${label})`, 'success');
-    });
 
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
       setDiscordModal({ open: true, type: 'WITHDRAW_SUCCESS', code, netAmount, taxAmount, rate });
@@ -175,6 +169,7 @@ export default function App() {
     if (tabId === 'admin') { 
         socket.emit('admin_fetch_db'); 
         socket.emit('admin_fetch_logs'); 
+        socket.emit('admin_fetch_risk_accounts');
         socket.emit('admin_fetch_users_list');
     }
   };
@@ -413,7 +408,7 @@ export default function App() {
           </div>
       )}
 
-      {/* EASTER EGG DAJE ROMA (IMMAGINE IMPORTATA CORRETTAMENTE) */}
+      {/* EASTER EGG DAJE ROMA */}
       {showEasterEgg && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center pointer-events-none bg-black/80">
               <img src={tottiImg} alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
@@ -449,7 +444,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* TICKER NEWS MINIMALISTA IN CIMA (SEMPRE VISIBILE) */}
+      {/* TICKER NEWS MINIMALISTA IN CIMA */}
       {marketNews.length > 0 && (
           <div className="h-8 bg-black/80 border-b border-nebula-border flex items-center overflow-hidden shrink-0 z-10 px-4">
               <div className="font-bold text-cyan-500 text-[10px] uppercase tracking-widest mr-4 shrink-0 flex items-center bg-black z-20 shadow-[10px_0_10px_black]"><Globe className="w-3 h-3 mr-1"/> Ultime Notizie</div>
@@ -703,7 +698,6 @@ export default function App() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Mio Portafoglio</h2>
               <div className="flex space-x-3">
-                <button onClick={() => setDepositModal(true)} className="px-4 py-2 bg-emerald-600 border border-emerald-500/50 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 flex items-center transition-colors"><ArrowRightCircle className="w-4 h-4 mr-2"/> Deposita</button>
                 <button onClick={() => setDiscordModal({open: true, type: 'WITHDRAW'})} className="px-4 py-2 bg-nebula-800 border border-nebula-border text-white rounded-lg text-sm font-bold hover:bg-nebula-700 flex items-center transition-colors"><Landmark className="w-4 h-4 mr-2"/> Preleva Denaro</button>
               </div>
             </div>
@@ -871,6 +865,12 @@ export default function App() {
               <h2 className="text-2xl font-black flex items-center gap-3">
                   {user.isAdmin ? <><UserCog className="w-6 h-6 text-rose-500" /> <span className="text-rose-500">Dev / Admin Panel</span></> : <><FileCode2 className="w-6 h-6 text-emerald-500" /> <span className="text-emerald-500">Finanza Control Panel</span></>}
               </h2>
+              {/* TASTO MERCATO STRAORDINARIO (SOLO ADMIN) */}
+              {user.isAdmin && (
+                  <button onClick={() => socket.emit('admin_action', { type: 'toggle_extra_market' })} className={`px-4 py-2 font-bold rounded-lg border flex items-center shadow-lg transition-all duration-300 ${gameTime.isExtraordinary ? 'bg-rose-600 border-rose-500 text-white' : 'bg-nebula-800 border-nebula-border text-slate-400 hover:text-white'}`}>
+                    <Store className="w-4 h-4 mr-2"/> {gameTime.isExtraordinary ? 'SPEGNI Mercato Straordinario' : 'ACCENDI Mercato Straordinario'}
+                  </button>
+              )}
             </div>
 
             {/* SEZIONI CONDIVISE (FINANZA & ADMIN) */}
@@ -977,7 +977,7 @@ export default function App() {
                             <h4 className="font-black text-emerald-400 mb-2 flex items-center z-10 relative"><Check className="w-4 h-4 mr-2"/> CHIAVE AUTENTICA</h4>
                             <div className="grid grid-cols-2 gap-2 text-xs font-mono z-10 relative">
                               <span className="text-slate-400">Utente/Ente:</span><span className="text-white font-bold">{adminValidator.name}</span>
-                              <span className="text-slate-400">Da erogare:</span><span className="text-white font-bold text-lg">{formatCurrency(adminValidator.amount)}</span>
+                              <span className="text-slate-400">Da erogare (Netto):</span><span className="text-white font-bold text-lg">{formatCurrency(adminValidator.amount)}</span>
                             </div>
                             <p className={`mt-3 text-xs z-10 relative font-bold ${adminValidator.isRedeemed ? 'text-rose-400' : 'text-emerald-300'}`}>
                                 {adminValidator.isRedeemed ? 'ATTENZIONE: Già pagata in passato!' : 'Eroga il pagamento in RP.'}
@@ -1007,7 +1007,7 @@ export default function App() {
                                 if (log.includes("[VENDITA")) colorClass = "text-emerald-300";
                                 if (log.includes("[PRELIEVO]")) colorClass = "text-cyan-300";
                                 if (log.includes("[SISTEMA]") || log.includes("[MANIPOLAZIONE]") || log.includes("[IPO]")) colorClass = "text-purple-300";
-                                if (log.includes("P&L: -") || log.includes("[BANCA]") || log.includes("[TASSE]")) colorClass = "text-rose-400";
+                                if (log.includes("P&L: -") || log.includes("[PIGNORAMENTO]") || log.includes("[BANCA]") || log.includes("[TASSE]")) colorClass = "text-rose-400";
                                 return <div key={i} className={`mb-1.5 border-b border-slate-800/50 pb-1.5 ${colorClass}`}>{log}</div>;
                             })}
                           </div>
@@ -1019,8 +1019,53 @@ export default function App() {
             {/* SEZIONI ESCLUSIVE ADMIN (Non finanza) */}
             {user.isAdmin && (
             <>
+            {/* GESTIONE FONDI TASSE E DB */}
+            {dbBackupInfo && dbBackupInfo.funds && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.1)] md:col-span-2 transition-all">
+                    <h3 className="text-lg font-bold text-white mb-2 border-b border-emerald-900/50 pb-2 flex items-center"><Landmark className="w-5 h-5 mr-2 text-emerald-500"/> Gestione Fondi Tassazione (No Crypto)</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Lo Stato incassa il 55% dei prelievi, le aziende si dividono il 10%.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
+                            <div>
+                            <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
+                            <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
+                            </div>
+                            <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition-colors">Preleva</button>
+                        </div>
+                        <div className="bg-nebula-950 p-4 rounded-lg border border-cyan-500/30">
+                            <div className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider mb-3">Fondi Aziendali (Da erogare)</div>
+                            <div className="space-y-2 max-h-24 overflow-y-auto custom-scroll pr-2">
+                            {Object.entries(dbBackupInfo.funds.companies).map(([ticker, amount]) => amount > 0 && (
+                                <div key={ticker} className="flex justify-between items-center text-sm border-b border-nebula-border/50 pb-2">
+                                <span className="font-bold text-white">{ticker}</span>
+                                <div className="flex items-center space-x-3">
+                                    <span className="font-mono text-slate-300">{formatCurrency(amount)}</span>
+                                    <button onClick={() => socket.emit('admin_withdraw_fund', { target: ticker })} className="px-2 py-1 bg-cyan-600/30 text-cyan-400 hover:bg-cyan-600/50 text-[10px] rounded transition-colors">Preleva</button>
+                                </div>
+                                </div>
+                            ))}
+                            {Object.values(dbBackupInfo.funds.companies).every(v => v === 0) && <div className="text-xs text-slate-500">Nessun fondo aziendale accumulato.</div>}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md transition-all">
+                    <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> DB Backup</h3>
+                    <p className="text-[10px] text-slate-400 mb-4">Salva prima di riavviare.</p>
+                    <div className="flex flex-col space-y-2">
+                        <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded flex items-center justify-center text-xs transition-colors"><Download className="w-3 h-3 mr-2"/> Scarica JSON</button>
+                        <label className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded flex items-center justify-center cursor-pointer text-xs transition-colors">
+                        <Upload className="w-3 h-3 mr-2"/> Ripristina JSON
+                        <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
+                        </label>
+                    </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              
               <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md flex flex-col transition-all">
                   <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Newspaper className="w-5 h-5 mr-2 text-cyan-500"/> Notizie e Generatore</h3>
                   <div className="flex flex-col space-y-4 mt-2">
