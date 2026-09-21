@@ -14,7 +14,7 @@ import tottiImg from './totti.png';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://giving-shipping-carmen-edinburgh.trycloudflare.com"; 
+const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
 
 let socket;
 
@@ -60,7 +60,7 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ title: '', msg: '', isBull: true });
   const [adminHoldingsEdit, setAdminHoldingsEdit] = useState({ ticker: 'SNEB', action: 'add', qty: 1 });
-  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 20000, maxPrice: 600, minPrice: 5.0, holdingTax: 0 });
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 10000, maxPrice: 600, minPrice: 5.0, holdingTax: 0 });
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
   const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
@@ -83,6 +83,7 @@ export default function App() {
       withCredentials: true, transports: ['websocket', 'polling'], upgrade: true, reconnectionAttempts: 5, timeout: 10000
     });
 
+    // LISTENER CONNESSIONE BACKEND
     socket.on('connect', () => setIsBackendOnline(true));
     socket.on('disconnect', () => setIsBackendOnline(false));
     socket.on('connect_error', () => setIsBackendOnline(false));
@@ -263,6 +264,29 @@ export default function App() {
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
   const isMarketOpen = gameTime.isExtraordinary || (gameTime?.hours >= 8 && gameTime?.hours < 19) || (gameTime?.hours === 19 && gameTime?.minutes < 30);
 
+  // Calcolo Dynamic Fee e Execution Fee (3%)
+  let dynamicFee = 0;
+  let executionFee = 0;
+  let baseValue = 0;
+
+  if (activeAssetObj) {
+    baseValue = (parseFloat(tradeQty || 0) * (ui.orderType === 'live' ? activeAssetObj.currentPrice : (parseFloat(limitPrice)||0)));
+    
+    // Tassa sulle transazioni in entrata (Broker Fee invisibile per combattere il lazy trading)
+    if (baseValue > 0) {
+        executionFee = baseValue * 0.03;
+    }
+
+    let tierLimit = user.isProMax ? 100000 : (user.isPro ? 50000 : 25000);
+    let currentVal = (portfolio.holdings[activeAssetObj.ticker]?.shares || 0) * activeAssetObj.currentPrice;
+    let newVal = currentVal + (parseFloat(tradeQty || 0) * activeAssetObj.currentPrice);
+    if (newVal > tierLimit) {
+      let overLimitVal = newVal - tierLimit;
+      if (currentVal >= tierLimit) overLimitVal = parseFloat(tradeQty || 0) * activeAssetObj.currentPrice;
+      dynamicFee = (overLimitVal / activeAssetObj.currentPrice) * 0.50;
+    }
+  }
+
   // GRAFICO RENDERER
   useEffect(() => {
     if (!activeAssetObj || ui.activeTab !== 'markets') return;
@@ -323,7 +347,6 @@ export default function App() {
             <div className="bg-nebula-900/80 border border-nebula-border backdrop-blur-xl p-10 rounded-3xl shadow-2xl w-full text-center">
               <Lock className="w-16 h-16 text-cyan-500 mx-auto mb-6" />
               
-              {/* INDICATORE STATO SERVER */}
               <div className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold mb-4 border ${isBackendOnline ? 'bg-emerald-900/30 border-emerald-500/50 text-emerald-400' : 'bg-rose-900/30 border-rose-500/50 text-rose-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${isBackendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                   <span>{isBackendOnline ? 'Sistema Online' : 'Server Offline'}</span>
@@ -347,7 +370,6 @@ export default function App() {
             </div>
         </div>
         
-        {/* Decorazioni sfondo */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-cyan-900/20 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-rose-900/10 blur-[120px] rounded-full pointer-events-none"></div>
       </div>
@@ -541,7 +563,7 @@ export default function App() {
                         </div>
                     )}
                     
-                    {/* PANNELLO TRADE IN FULLSCREEN */}
+                    {/* PANNELLO TRADE IN FULLSCREEN E FEE DI TRANSAZIONE */}
                     {isChartFS && (
                       <div className="absolute bottom-8 left-8 z-[110]">
                           {fsTradeOpen && (
@@ -554,6 +576,14 @@ export default function App() {
                                       <span>Cassa:</span> <span className="text-white font-bold">{formatCurrency(portfolio.cash)}</span>
                                   </div>
                                   <input type="number" min="0.01" step="any" value={tradeQty} onChange={(e) => setTradeQty(e.target.value)} className="w-full bg-black/50 border border-nebula-border rounded-lg px-3 py-2 text-white font-mono mb-3 outline-none focus:border-cyan-500" />
+                                  
+                                  {/* INFO FEE FULLSCREEN */}
+                                  <div className="flex flex-col space-y-1 font-mono text-xs mb-3 pb-3 border-b border-nebula-border/50">
+                                    <div className="flex justify-between items-center"><span className="text-slate-400">Valore Asset:</span><span className="font-bold text-white">{formatCurrency(baseValue)}</span></div>
+                                    <div className="flex justify-between items-center text-rose-400"><span className="text-[10px]">Commissione Rete (3%):</span><span className="font-bold">+{formatCurrency(executionFee)}</span></div>
+                                    {dynamicFee > 0 && <div className="flex justify-between items-center text-rose-400"><span className="text-[10px]">Extra Fee Limite:</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
+                                  </div>
+
                                   <div className="grid grid-cols-2 gap-2">
                                       <button onClick={() => executeOrder('BUY')} className="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg uppercase text-xs">Compra</button>
                                       <button onClick={() => executeOrder('SELL')} className="py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg uppercase text-xs">Vendi</button>
@@ -605,8 +635,12 @@ export default function App() {
                           )}
                       </div>
                       
+                      {/* FEE VISUALIZATION UPDATE */}
                       <div className="flex flex-col space-y-1 font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50">
-                        <div className="flex justify-between items-center"><span className="text-slate-400">Valore Stimato:</span><span className="font-bold text-white">{formatCurrency((parseFloat(tradeQty)||0) * (ui.orderType === 'live' ? activeAssetObj.currentPrice : (parseFloat(limitPrice)||0)))}</span></div>
+                        <div className="flex justify-between items-center"><span className="text-slate-400">Valore Asset:</span><span className="font-bold text-white">{formatCurrency(baseValue)}</span></div>
+                        {ui.orderType === 'live' && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Commissione Rete (3%):</span><span className="font-bold">+{formatCurrency(executionFee)}</span></div>}
+                        {dynamicFee > 0 && ui.orderType === 'live' && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Extra Fee Limite Superato:</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
+                        {ui.orderType === 'live' && <div className="flex justify-between items-center text-emerald-400 mt-2 border-t border-nebula-border/50 pt-2"><span className="text-xs uppercase font-bold">Totale Ordine:</span><span className="font-bold">{formatCurrency(baseValue + executionFee + dynamicFee)}</span></div>}
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4 mt-auto">
@@ -695,7 +729,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB NEBULACHANCE (SCOMMESSE) */}
+          {/* TAB NEBULACHANCE */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'chance' ? 'flex' : 'hidden'}`}>
              <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 flex items-center"><Ticket className="w-6 h-6 mr-3 text-purple-500"/> NebulaChance</h2>
@@ -1012,48 +1046,6 @@ export default function App() {
                       </div>
                   </div>
               </div>
-
-              {/* NEBULACHANCE ADMIN */}
-              <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
-                  <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
-                  <div className="flex flex-col space-y-2 mt-2">
-                      <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      <div className="flex space-x-2">
-                          <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      </div>
-                      <div className="flex space-x-2">
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                      </div>
-                      <button onClick={() => {
-                          const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
-                          if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
-                          socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
-                          setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-                      }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
-                  </div>
-                  
-                  {/* Risoluzione Scommesse Attive */}
-                  {Object.values(bets).some(b => b.active) && (
-                      <div className="mt-6 border-t border-purple-500/30 pt-4">
-                          <h4 className="text-xs font-bold text-purple-300 uppercase mb-2">Risolvi Scommesse Attive</h4>
-                          {Object.values(bets).filter(b => b.active).map(bet => (
-                              <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
-                                  <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
-                                  <div className="flex space-x-2">
-                                      {bet.options.map((opt, i) => (
-                                          <button key={i} onClick={() => {
-                                              if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
-                                          }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
-                                      ))}
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  )}
-              </div>
             </div>
 
             {/* EDITOR ALGORITMO E CONTROLLO TEMPO */}
@@ -1203,7 +1195,7 @@ export default function App() {
                   <p className="mb-2">Prelievo Minimo: 100€</p>
                   <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3 text-rose-400 font-bold justify-center items-center">
-                      <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 35%</span>
+                      <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 65%</span>
                   </div>
                 </div>
                 <input type="number" id="dm-amount" defaultValue="100" min="100" step="any" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500 transition-colors" />
