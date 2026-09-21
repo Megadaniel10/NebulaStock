@@ -14,7 +14,7 @@ import tottiImg from './totti.png';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://accidents-essentially-camcorders-should.trycloudflare.com"; 
+const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
 
 let socket;
 
@@ -60,11 +60,10 @@ export default function App() {
   const [adminFetchedUser, setAdminFetchedUser] = useState(null);
   const [adminNews, setAdminNews] = useState({ title: '', msg: '', isBull: true });
   const [adminHoldingsEdit, setAdminHoldingsEdit] = useState({ ticker: 'SNEB', action: 'add', qty: 1 });
-  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 1000, maxPrice: 600, minPrice: 0.01, holdingTax: 0 });
+  const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 20000, maxPrice: 600, minPrice: 5.0, holdingTax: 0 });
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
   const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-  const [adminPromo, setAdminPromo] = useState({ tier: 'PRO', duration: 30, unit: 'days', generatedCode: '', label: '' });
 
   const [previewPts, setPreviewPts] = useState(Array(60).fill(100));
   const previewMomentum = useRef(0);
@@ -83,7 +82,6 @@ export default function App() {
       withCredentials: true, transports: ['websocket', 'polling'], upgrade: true, reconnectionAttempts: 5, timeout: 10000
     });
 
-    // LISTENER CONNESSIONE BACKEND
     socket.on('connect', () => setIsBackendOnline(true));
     socket.on('disconnect', () => setIsBackendOnline(false));
     socket.on('connect_error', () => setIsBackendOnline(false));
@@ -123,11 +121,6 @@ export default function App() {
     socket.on('admin_users_list', (list) => setAdminUsersList(list));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
-    
-    socket.on('admin_promo_generated', ({ code, label }) => {
-        setAdminPromo(p => ({ ...p, generatedCode: code, label }));
-        showToast(`Codice Generato (${label})`, 'success');
-    });
 
     socket.on('withdrawal_success', ({ code, netAmount, taxAmount, rate }) => {
       setDiscordModal({ open: true, type: 'WITHDRAW_SUCCESS', code, netAmount, taxAmount, rate });
@@ -151,21 +144,19 @@ export default function App() {
 
   useEffect(() => { if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight; }, [chatHistory, ui.activeChatRoom]);
 
-  // Simulazione Live per Editor Algoritmo
+  // Simulazione Live per Editor Algoritmo (AGGIORNATA per replicare backend reale)
   useEffect(() => {
       if (ui.activeTab !== 'admin' || !user.isAdmin) return;
       const interval = setInterval(() => {
           setPreviewPts(prev => {
               let last = prev[prev.length - 1];
-              let drift = adminAlgoInput.driftOffset;
+              let drift = adminAlgoInput.driftOffset + 0.00015; // Aggiunto drift base
               let realVol = 0.02 * adminAlgoInput.volMult;
               
-              if (Math.random() < 0.25) { realVol *= 0.15; previewMomentum.current *= 0.5; }
-              else {
-                  if (Math.random() < 0.25) previewMomentum.current += (Math.random() - 0.5) * realVol * 6.0;
-                  previewMomentum.current = (previewMomentum.current * 0.85) + ((Math.random() - 0.5) * realVol * 0.8);
-              }
-              let next = last * (1 + drift + previewMomentum.current + (Math.random() - 0.5) * (realVol * 1.5));
+              if (Math.random() < 0.15) { previewMomentum.current += (Math.random() - 0.5) * realVol * 4.0; }
+              previewMomentum.current = (previewMomentum.current * 0.85) + ((Math.random() - 0.5) * realVol * 0.7);
+              
+              let next = last * (1 + drift + previewMomentum.current + (Math.random() - 0.5) * realVol);
               return [...prev.slice(1), Math.max(0.1, next)];
           });
       }, 300);
@@ -326,7 +317,6 @@ export default function App() {
             <div className="bg-nebula-900/80 border border-nebula-border backdrop-blur-xl p-10 rounded-3xl shadow-2xl w-full text-center">
               <Lock className="w-16 h-16 text-cyan-500 mx-auto mb-6" />
               
-              {/* INDICATORE STATO SERVER */}
               <div className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold mb-4 border ${isBackendOnline ? 'bg-emerald-900/30 border-emerald-500/50 text-emerald-400' : 'bg-rose-900/30 border-rose-500/50 text-rose-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${isBackendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                   <span>{isBackendOnline ? 'Sistema Online' : 'Server Offline'}</span>
@@ -350,7 +340,6 @@ export default function App() {
             </div>
         </div>
         
-        {/* Decorazioni sfondo */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-cyan-900/20 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-rose-900/10 blur-[120px] rounded-full pointer-events-none"></div>
       </div>
@@ -392,7 +381,7 @@ export default function App() {
           </div>
       )}
 
-      {/* EASTER EGG DAJE ROMA */}
+      {/* EASTER EGG DAJE ROMA (IMMAGINE IMPORTATA CORRETTAMENTE) */}
       {showEasterEgg && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center pointer-events-none bg-black/80">
               <img src={tottiImg} alt="Daje Roma" className="w-auto h-1/2 max-w-lg object-contain animate-bounce shadow-[0_0_100px_rgba(255,255,255,0.5)] rounded-lg" />
@@ -670,7 +659,6 @@ export default function App() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-white">Mio Portafoglio</h2>
               <div className="flex space-x-3">
-                <button onClick={() => setDepositModal(true)} className="px-4 py-2 bg-emerald-600 border border-emerald-500/50 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 flex items-center transition-colors"><ArrowRightCircle className="w-4 h-4 mr-2"/> Deposita</button>
                 <button onClick={() => setDiscordModal({open: true, type: 'WITHDRAW'})} className="px-4 py-2 bg-nebula-800 border border-nebula-border text-white rounded-lg text-sm font-bold hover:bg-nebula-700 flex items-center transition-colors"><Landmark className="w-4 h-4 mr-2"/> Preleva Denaro</button>
               </div>
             </div>
@@ -923,6 +911,7 @@ export default function App() {
                                 <span className="font-mono text-cyan-400">{h.shares} <span className="text-[10px] text-slate-500">pz</span></span>
                               </div>
                             ))}
+                            {Object.keys(adminFetchedUser.holdings || {}).length === 0 && <div className="text-xs text-slate-500 col-span-4">Nessun asset in portafoglio.</div>}
                           </div>
                         </div>
                       </div>
@@ -973,7 +962,7 @@ export default function App() {
                                 if (log.includes("[VENDITA")) colorClass = "text-emerald-300";
                                 if (log.includes("[PRELIEVO]")) colorClass = "text-cyan-300";
                                 if (log.includes("[SISTEMA]") || log.includes("[MANIPOLAZIONE]") || log.includes("[IPO]")) colorClass = "text-purple-300";
-                                if (log.includes("P&L: -") || log.includes("[PIGNORAMENTO]") || log.includes("[BANCA]") || log.includes("[TASSE]")) colorClass = "text-rose-400";
+                                if (log.includes("P&L: -") || log.includes("[BANCA]") || log.includes("[TASSE]")) colorClass = "text-rose-400";
                                 return <div key={i} className={`mb-1.5 border-b border-slate-800/50 pb-1.5 ${colorClass}`}>{log}</div>;
                             })}
                           </div>
@@ -1015,108 +1004,80 @@ export default function App() {
                   </div>
               </div>
 
-              {/* NEBULACHANCE ADMIN */}
-              <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
-                  <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
-                  <div className="flex flex-col space-y-2 mt-2">
-                      <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      <div className="flex space-x-2">
-                          <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      </div>
-                      <div className="flex space-x-2">
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                      </div>
-                      <button onClick={() => {
-                          const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
-                          if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
-                          socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
-                          setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-                      }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
-                  </div>
+              {/* PAYWALL E GENERATORI */}
+              <div className="bg-nebula-900/60 p-6 border border-amber-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
+                  <h3 className="text-lg font-bold text-amber-500 mb-2 border-b border-amber-500/30 pb-2 flex items-center"><Key className="w-5 h-5 mr-2"/> Generatori Licenze</h3>
                   
-                  {/* Risoluzione Scommesse Attive */}
-                  {Object.values(bets).some(b => b.active) && (
-                      <div className="mt-6 border-t border-purple-500/30 pt-4">
-                          <h4 className="text-xs font-bold text-purple-300 uppercase mb-2">Risolvi Scommesse Attive</h4>
-                          {Object.values(bets).filter(b => b.active).map(bet => (
-                              <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
-                                  <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
-                                  <div className="flex space-x-2">
-                                      {bet.options.map((opt, i) => (
-                                          <button key={i} onClick={() => {
-                                              if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
-                                          }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
-                                      ))}
-                                  </div>
-                              </div>
-                          ))}
+                  {/* PAYWALL */}
+                  <div className="mb-6 bg-black/40 p-4 rounded-lg border border-amber-500/20">
+                      <label className="text-[10px] text-slate-400 uppercase font-bold block mb-2">Chiave Accesso Base (15.000€)</label>
+                      <div className="flex space-x-2">
+                          <button onClick={() => socket.emit('admin_action', { type: 'generate_access_key' })} className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded transition-colors">Genera Chiave Paywall</button>
+                          {adminAccessKey && <div className="flex-1 bg-black p-2 rounded text-center border border-amber-500/50 font-mono text-amber-400 text-sm select-all flex items-center justify-center">{adminAccessKey}</div>}
                       </div>
-                  )}
+                  </div>
               </div>
             </div>
 
-            {/* EDITOR ALGORITMO E CONTROLLO TEMPO */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="bg-nebula-900/60 p-6 border border-indigo-500/30 rounded-xl backdrop-blur-md transition-all">
-                    <h3 className="text-lg font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-2 flex items-center justify-between">
-                        <span className="flex items-center"><Settings className="w-5 h-5 mr-2"/> Editor Avanzato Algoritmo</span>
-                        <button onClick={showAlgoGuide} className="text-[10px] bg-indigo-900/50 text-indigo-300 px-3 py-1 rounded hover:bg-indigo-900 transition-colors">? Guida</button>
-                    </h3>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <div className="mb-4">
-                                <label className="text-xs text-slate-400 block mb-1">Moltiplicatore Globale Volatilità (Default: 1.0)</label>
-                                <input type="number" step="0.1" value={adminAlgoInput.volMult} onChange={e => setAdminAlgoInput({...adminAlgoInput, volMult: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
-                            </div>
-                            <div className="mb-4">
-                                <label className="text-xs text-slate-400 block mb-1">Bias di Drift Globale (+ per bull, - per bear. Default: 0.0)</label>
-                                <input type="number" step="0.0001" value={adminAlgoInput.driftOffset} onChange={e => setAdminAlgoInput({...adminAlgoInput, driftOffset: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
-                            </div>
-                            <div className="flex space-x-2 mb-4">
-                                <button onClick={() => setAdminAlgoInput({volMult: 1.0, driftOffset: 0.0})} className="flex-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-white rounded py-1 transition-colors">Standard</button>
-                                <button onClick={() => setAdminAlgoInput({volMult: 2.5, driftOffset: 0.0})} className="flex-1 text-[10px] bg-amber-700 hover:bg-amber-600 text-white rounded py-1 transition-colors">Alta Volatilità</button>
-                                <button onClick={() => setAdminAlgoInput({volMult: 0.8, driftOffset: 0.005})} className="flex-1 text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white rounded py-1 transition-colors">Bull Lento</button>
-                                <button onClick={() => setAdminAlgoInput({volMult: 1.8, driftOffset: -0.008})} className="flex-1 text-[10px] bg-rose-700 hover:bg-rose-600 text-white rounded py-1 transition-colors">Crollo (Bear)</button>
-                            </div>
-                            <button onClick={() => socket.emit('admin_action', { type: 'update_algo', volMult: adminAlgoInput.volMult, driftOffset: adminAlgoInput.driftOffset })} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors">Applica al Server</button>
-                        </div>
-                        
-                        <div className="flex flex-col">
-                            <label className="text-xs text-slate-400 block mb-2">Anteprima Mini-Simulazione (Base 100€, 60 Tick Live)</label>
-                            <div className="flex-1">
-                                {renderAlgoPreview()}
-                            </div>
-                            <p className="text-[10px] text-slate-500 mt-2 italic text-center">L'anteprima si anima costantemente e reagisce ai parametri inseriti qui a sinistra.</p>
-                        </div>
-                    </div>
-                </div>
+            {/* EDITOR ALGORITMO */}
+            <div className="mb-6 bg-nebula-900/60 p-6 border border-indigo-500/30 rounded-xl backdrop-blur-md transition-all">
+                <h3 className="text-lg font-bold text-indigo-400 mb-2 border-b border-indigo-500/30 pb-2 flex items-center justify-between">
+                    <span className="flex items-center"><Settings className="w-5 h-5 mr-2"/> Editor Avanzato Algoritmo</span>
+                    <button onClick={showAlgoGuide} className="text-[10px] bg-indigo-900/50 text-indigo-300 px-3 py-1 rounded hover:bg-indigo-900 transition-colors">? Guida</button>
+                </h3>
                 
-                <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
-                  <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server & Velocità</h3>
-                  
-                  <div className="flex items-center space-x-4 mb-4">
-                    <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
-                    <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza Orario</button></div>
-                  </div>
-
-                  <div className="flex items-center space-x-4 border-t border-rose-900/50 pt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="text-xs text-slate-400 block mb-1">Velocità Tick (ms)</label>
-                      <input type="number" value={adminTickRate} onChange={e => setAdminTickRate(e.target.value)} min="100" className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-24 outline-none" />
+                        <div className="mb-4">
+                            <label className="text-xs text-slate-400 block mb-1">Moltiplicatore Globale Volatilità (Default: 1.0)</label>
+                            <input type="number" step="0.1" value={adminAlgoInput.volMult} onChange={e => setAdminAlgoInput({...adminAlgoInput, volMult: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
+                        </div>
+                        <div className="mb-4">
+                            <label className="text-xs text-slate-400 block mb-1">Bias di Drift Globale (+ per bull, - per bear. Default: 0.0)</label>
+                            <input type="number" step="0.0001" value={adminAlgoInput.driftOffset} onChange={e => setAdminAlgoInput({...adminAlgoInput, driftOffset: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono text-sm outline-none" />
+                        </div>
+                        <div className="flex space-x-2 mb-4">
+                            <button onClick={() => setAdminAlgoInput({volMult: 1.0, driftOffset: 0.0})} className="flex-1 text-[10px] bg-slate-700 hover:bg-slate-600 text-white rounded py-1 transition-colors">Standard</button>
+                            <button onClick={() => setAdminAlgoInput({volMult: 2.5, driftOffset: 0.0})} className="flex-1 text-[10px] bg-amber-700 hover:bg-amber-600 text-white rounded py-1 transition-colors">Alta Volatilità</button>
+                            <button onClick={() => setAdminAlgoInput({volMult: 0.8, driftOffset: 0.005})} className="flex-1 text-[10px] bg-emerald-700 hover:bg-emerald-600 text-white rounded py-1 transition-colors">Bull Lento</button>
+                            <button onClick={() => setAdminAlgoInput({volMult: 1.8, driftOffset: -0.008})} className="flex-1 text-[10px] bg-rose-700 hover:bg-rose-600 text-white rounded py-1 transition-colors">Crollo (Bear)</button>
+                        </div>
+                        <button onClick={() => socket.emit('admin_action', { type: 'update_algo', volMult: adminAlgoInput.volMult, driftOffset: adminAlgoInput.driftOffset })} className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors">Applica al Server</button>
                     </div>
-                    <div className="flex items-end h-full pt-5">
-                      <button onClick={() => socket.emit('admin_action', { type: 'set_tick_rate', ms: adminTickRate })} className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Velocità</button>
+                    
+                    <div className="flex flex-col">
+                        <label className="text-xs text-slate-400 block mb-2">Anteprima Mini-Simulazione (Base 100€, 60 Tick Live)</label>
+                        <div className="flex-1">
+                            {renderAlgoPreview()}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-2 italic text-center">L'anteprima si anima costantemente e reagisce ai parametri inseriti qui a sinistra.</p>
                     </div>
-                  </div>
                 </div>
             </div>
-
+            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Controllo Tempo Server & Velocità</h3>
+                
+                {/* ORA / MINUTI */}
+                <div className="flex items-center space-x-4 mb-4">
+                  <div><label className="text-xs text-slate-400 block mb-1">Ore (0-23)</label><input type="number" id="adm-hh" defaultValue={gameTime?.hours} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div><label className="text-xs text-slate-400 block mb-1">Minuti (0-59)</label><input type="number" id="adm-mm" defaultValue={gameTime?.minutes} className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-20 outline-none" /></div>
+                  <div className="flex items-end h-full pt-5"><button onClick={() => socket.emit('admin_action', { type: 'time', hh: parseInt(document.getElementById('adm-hh').value), mm: parseInt(document.getElementById('adm-mm').value) })} className="px-6 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded">Forza Orario</button></div>
+                </div>
+
+                {/* VELOCITÀ TICK */}
+                <div className="flex items-center space-x-4 border-t border-rose-900/50 pt-4">
+                  <div>
+                    <label className="text-xs text-slate-400 block mb-1">Velocità Tick (ms)</label>
+                    <input type="number" value={adminTickRate} onChange={e => setAdminTickRate(e.target.value)} min="100" className="bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono w-24 outline-none" />
+                  </div>
+                  <div className="flex items-end h-full pt-5">
+                    <button onClick={() => socket.emit('admin_action', { type: 'set_tick_rate', ms: adminTickRate })} className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded">Applica Velocità</button>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Modifica Parametri Asset (Live)</h3>
                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1136,8 +1097,8 @@ export default function App() {
                   <button onClick={() => socket.emit('admin_action', { type: 'reset_chart', ticker: adminPriceEdit.ticker })} className="col-span-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded text-xs flex items-center justify-center transition-colors"><RefreshCw className="w-3 h-3 mr-1"/> Reset</button>
                 </div>
               </div>
-
-              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
+              
+              <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl lg:col-span-2 backdrop-blur-md transition-all">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option></select></div>
@@ -1162,6 +1123,7 @@ export default function App() {
                   showToast("Lancio IPO effettuato sul server centrale.", "success");
                 }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
               </div>
+
             </div>
             </>
             )}
@@ -1170,65 +1132,6 @@ export default function App() {
 
         </main>
       </div>
-
-      {depositModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-nebula-900/90 border border-emerald-500/50 rounded-2xl max-w-sm w-full p-6 relative">
-            <button onClick={() => setDepositModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
-            <div className="text-center mb-6">
-              <ArrowRightCircle className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-              <h3 className="text-xl font-bold text-white">Deposita Fondi</h3>
-            </div>
-            <div className="space-y-4 text-sm text-slate-300">
-              <p className="font-bold text-emerald-400">Segui questi step su Discord per aggiungere fondi:</p>
-              <ol className="list-decimal list-inside space-y-2">
-                <li>Vai nel canale <span className="font-mono bg-nebula-950 px-1 rounded">#cmd</span> su Urban RP.</li>
-                <li>Invia il comando <span className="font-mono text-cyan-400 bg-nebula-950 px-1 rounded">/bonifico</span> inviando la somma che vuoi depositare a <strong>@NebulaStocks</strong>.</li>
-                <li>Attendi che lo staff approvi e accrediti la somma sul tuo terminale.</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {discordModal.open && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-nebula-900/90 border border-cyan-500/50 rounded-2xl max-w-sm w-full p-6 relative">
-            <button onClick={() => setDiscordModal({open: false, type: '', code: ''})} className="absolute top-4 right-4 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
-            <div className="text-center mb-6">
-              <Wallet className="w-10 h-10 text-cyan-400 mx-auto mb-2" />
-              <h3 className="text-xl font-bold text-white">Prelievo Denaro</h3>
-            </div>
-            {discordModal.type === 'WITHDRAW' ? (
-              <>
-                <div className="text-xs text-slate-400 mb-4 text-center">
-                  <p className="mb-2">Prelievo Minimo: 100€</p>
-                  <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
-                  <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3 text-rose-400 font-bold justify-center items-center">
-                      <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 35%</span>
-                  </div>
-                </div>
-                <input type="number" id="dm-amount" defaultValue="100" min="100" step="any" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500 transition-colors" />
-                <button onClick={requestWithdrawal} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-bold transition-colors">Genera Chiave di Prelievo</button>
-              </>
-            ) : (
-              <div className="text-center">
-                <p className="text-sm text-emerald-400 mb-4 font-bold">Richiesta elaborata.</p>
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono mb-4 text-slate-300">
-                  <span className="text-left">Prelievo Lordo:</span> <span className="text-right">{formatCurrency(discordModal.netAmount + discordModal.taxAmount)}</span>
-                  <span className="text-left text-rose-400">Tasse (-{(discordModal.rate * 100).toFixed(0)}%):</span> <span className="text-right text-rose-400">-{formatCurrency(discordModal.taxAmount)}</span>
-                  <span className="text-left font-bold text-white border-t border-nebula-border pt-1">Importo Netto:</span> <span className="text-right font-bold text-emerald-400 border-t border-nebula-border pt-1">{formatCurrency(discordModal.netAmount)}</span>
-                </div>
-                <div className="bg-black border border-nebula-border p-4 rounded-xl mb-4">
-                  <p className="text-xs text-slate-500 mb-1">La tua Chiave di Prelievo:</p>
-                  <p className="font-mono text-xl text-white tracking-widest select-all">{discordModal.code}</p>
-                </div>
-                <p className="text-xs text-slate-400">Invia questa chiave in assistenza su Discord per ricevere i fondi netti in RP.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* STILI PER ANIMAZIONI GLOBALI E FULLSCREEN */}
       <style dangerouslySetInnerHTML={{__html: `
