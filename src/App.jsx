@@ -5,15 +5,16 @@ import {
   LineChart, Store, Clock, Users, Building, Percent, Search,
   LogOut, Image, Zap, Trash2, RefreshCw, Key, Download, Upload,
   Landmark, ArrowRightCircle, AlertTriangle, ScrollText, ChevronDown,
-  TrendingUp, TrendingDown, Target, Maximize, Minimize, Newspaper, FileCode2, Snowflake, Ticket
+  TrendingUp, TrendingDown, Target, Maximize, Minimize, Newspaper, FileCode2, Snowflake, Ticket, Activity
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
+// IMPORTA L'IMMAGINE DALLA CARTELLA SRC
 import tottiImg from './totti.png';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://queensland-students-investigators-adds.trycloudflare.com"; 
+const BACKEND_URL = "https://anatomy-organ-versus-cloth.trycloudflare.com"; 
 
 let socket;
 
@@ -45,6 +46,8 @@ export default function App() {
   const [discordModal, setDiscordModal] = useState({ open: false, type: '', code: '', netAmount: 0, taxAmount: 0, rate: 0 });
   const [depositModal, setDepositModal] = useState(false);
   const [bets, setBets] = useState({});
+  const [betAmounts, setBetAmounts] = useState({});
+  const [offlineSummary, setOfflineSummary] = useState(null); // POPUP RESOCONTO OFFLINE
   
   // Admin & Finanza States
   const [adminValidator, setAdminValidator] = useState(null);
@@ -62,8 +65,8 @@ export default function App() {
   const [newAsset, setNewAsset] = useState({ type: 'stocks', ticker: '', name: '', price: 10, vol: 0.02, sector: 'Tech', mcap: '€1M', desc: '', ceo: '', founded: '', employees: '', dividend: '0.00%', maxShares: 10000, maxPrice: 600, minPrice: 5.0, holdingTax: 0 });
   const [adminTickRate, setAdminTickRate] = useState(2000);
   const [adminAlgoInput, setAdminAlgoInput] = useState({ volMult: 1.0, driftOffset: 0.0 });
-  const [newBet, setNewBet] = useState({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-  const [riskAccounts, setRiskAccounts] = useState([]);
+  const [newBet, setNewBet] = useState({ name: '' });
+  const [betOptions, setBetOptions] = useState([{ name: '', quote: 2.0 }, { name: '', quote: 2.0 }]);
 
   const [previewPts, setPreviewPts] = useState(Array(60).fill(100));
   const previewMomentum = useRef(0);
@@ -94,6 +97,11 @@ export default function App() {
     socket.on('admin_config', (cfg) => { setGlobalConfig(cfg); setAdminAlgoInput({ volMult: cfg.globalVolMult, driftOffset: cfg.globalDrift }); });
     socket.on('bets_update', (data) => setBets(data));
 
+    // POPUP RESOCONTO OFFLINE
+    socket.on('offline_summary', (data) => {
+        setOfflineSummary(data);
+    });
+
     socket.on('account_update', (acc) => {
       if (acc) { setUser(prev => ({ ...prev, ...acc })); setPortfolio({ cash: acc.cash || 0, holdings: acc.holdings || {} }); setIsAuth(true); }
     });
@@ -119,7 +127,6 @@ export default function App() {
     
     socket.on('admin_logs_data', (logs) => { setAdminLogs(logs.reverse()); });
     socket.on('admin_users_list', (list) => setAdminUsersList(list));
-    socket.on('admin_risk_accounts_data', (data) => setRiskAccounts(data));
     socket.on('chat_update', ({ room, chat }) => { setChatHistory(prev => ({ ...prev, [room]: chat })); });
     socket.on('toast', ({ msg, type }) => showToast(msg, type));
 
@@ -154,9 +161,11 @@ export default function App() {
               let drift = adminAlgoInput.driftOffset + 0.00015;
               let realVol = 0.02 * adminAlgoInput.volMult;
               
-              if (Math.random() < 0.15) { previewMomentum.current += (Math.random() - 0.5) * realVol * 4.0; }
-              previewMomentum.current = (previewMomentum.current * 0.85) + ((Math.random() - 0.5) * realVol * 0.7);
-              
+              if (Math.random() < 0.25) { realVol *= 0.15; previewMomentum.current *= 0.5; }
+              else {
+                  if (Math.random() < 0.25) previewMomentum.current += (Math.random() - 0.5) * realVol * 6.0;
+                  previewMomentum.current = (previewMomentum.current * 0.85) + ((Math.random() - 0.5) * realVol * 0.8);
+              }
               let next = last * (1 + drift + previewMomentum.current + (Math.random() - 0.5) * realVol);
               return [...prev.slice(1), Math.max(0.1, next)];
           });
@@ -169,7 +178,6 @@ export default function App() {
     if (tabId === 'admin') { 
         socket.emit('admin_fetch_db'); 
         socket.emit('admin_fetch_logs'); 
-        socket.emit('admin_fetch_risk_accounts');
         socket.emit('admin_fetch_users_list');
     }
   };
@@ -259,27 +267,12 @@ export default function App() {
   const activeAssetObj = assets ? assets[ui.activeAsset] : null;
   const isMarketOpen = gameTime.isExtraordinary || (gameTime?.hours >= 8 && gameTime?.hours < 19) || (gameTime?.hours === 19 && gameTime?.minutes < 30);
 
-  // Calcolo Dynamic Fee e Execution Fee (3%)
-  let dynamicFee = 0;
   let executionFee = 0;
   let baseValue = 0;
 
   if (activeAssetObj) {
     baseValue = (parseFloat(tradeQty || 0) * (ui.orderType === 'live' ? activeAssetObj.currentPrice : (parseFloat(limitPrice)||0)));
-    
-    // Tassa sulle transazioni in entrata (Broker Fee invisibile per combattere il lazy trading)
-    if (baseValue > 0) {
-        executionFee = baseValue * 0.03;
-    }
-
-    let tierLimit = user.isProMax ? 100000 : (user.isPro ? 50000 : 25000);
-    let currentVal = (portfolio.holdings[activeAssetObj.ticker]?.shares || 0) * activeAssetObj.currentPrice;
-    let newVal = currentVal + (parseFloat(tradeQty || 0) * activeAssetObj.currentPrice);
-    if (newVal > tierLimit) {
-      let overLimitVal = newVal - tierLimit;
-      if (currentVal >= tierLimit) overLimitVal = parseFloat(tradeQty || 0) * activeAssetObj.currentPrice;
-      dynamicFee = (overLimitVal / activeAssetObj.currentPrice) * 0.50;
-    }
+    if (baseValue > 0) { executionFee = baseValue * 0.03; }
   }
 
   // GRAFICO RENDERER
@@ -342,7 +335,6 @@ export default function App() {
             <div className="bg-nebula-900/80 border border-nebula-border backdrop-blur-xl p-10 rounded-3xl shadow-2xl w-full text-center">
               <Lock className="w-16 h-16 text-cyan-500 mx-auto mb-6" />
               
-              {/* INDICATORE STATO SERVER */}
               <div className={`inline-flex items-center space-x-2 px-3 py-1.5 rounded-full text-[10px] uppercase tracking-widest font-bold mb-4 border ${isBackendOnline ? 'bg-emerald-900/30 border-emerald-500/50 text-emerald-400' : 'bg-rose-900/30 border-rose-500/50 text-rose-400'}`}>
                   <span className={`w-2 h-2 rounded-full ${isBackendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
                   <span>{isBackendOnline ? 'Sistema Online' : 'Server Offline'}</span>
@@ -365,8 +357,6 @@ export default function App() {
               </div>
             </div>
         </div>
-        
-        {/* Decorazioni sfondo */}
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-cyan-900/20 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-rose-900/10 blur-[120px] rounded-full pointer-events-none"></div>
       </div>
@@ -396,6 +386,26 @@ export default function App() {
   return (
     <div className="h-screen w-screen flex flex-col text-sm antialiased text-e2e8f0 font-sans" style={user.bgImage ? { backgroundImage: `url(${user.bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : { backgroundColor: '#05070e' }}>
       
+      {/* POPUP RESOCONTO OFFLINE */}
+      {offlineSummary && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm animate-fade-in">
+              <div className="bg-nebula-900 border border-cyan-500 p-8 rounded-2xl max-w-md text-center shadow-[0_0_50px_rgba(6,182,212,0.2)]">
+                  <Activity className={`w-12 h-12 mx-auto mb-4 ${offlineSummary.diff >= 0 ? 'text-emerald-500' : 'text-rose-500'}`} />
+                  <h2 className="text-2xl font-black text-white mb-4 uppercase tracking-widest">Resoconto Offline</h2>
+                  <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                      Bentornato, {user.name}! Mentre eri offline, i movimenti del mercato e le tasse sulle proprietà hanno modificato il tuo portafoglio.
+                  </p>
+                  <div className="bg-black/50 rounded-xl p-4 mb-6 border border-nebula-border/50">
+                      <div className="text-xs text-slate-500 uppercase mb-1 font-bold">Variazione Netta</div>
+                      <div className={`text-4xl font-mono font-black ${offlineSummary.diff >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>
+                          {offlineSummary.diff >= 0 ? '+' : ''}{formatCurrency(offlineSummary.diff)}
+                      </div>
+                  </div>
+                  <button onClick={() => setOfflineSummary(null)} className="w-full py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-xl uppercase tracking-widest transition-transform hover:scale-105">Chiudi e Inizia Trading</button>
+              </div>
+          </div>
+      )}
+
       {/* POPUP RESET */}
       {user.id && !user.hasSeenResetPopup && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm animate-fade-in">
@@ -444,7 +454,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* TICKER NEWS MINIMALISTA IN CIMA */}
+      {/* TICKER NEWS MINIMALISTA IN CIMA (SEMPRE VISIBILE) */}
       {marketNews.length > 0 && (
           <div className="h-8 bg-black/80 border-b border-nebula-border flex items-center overflow-hidden shrink-0 z-10 px-4">
               <div className="font-bold text-cyan-500 text-[10px] uppercase tracking-widest mr-4 shrink-0 flex items-center bg-black z-20 shadow-[10px_0_10px_black]"><Globe className="w-3 h-3 mr-1"/> Ultime Notizie</div>
@@ -578,7 +588,6 @@ export default function App() {
                                   <div className="flex flex-col space-y-1 font-mono text-xs mb-3 pb-3 border-b border-nebula-border/50">
                                     <div className="flex justify-between items-center"><span className="text-slate-400">Valore Asset:</span><span className="font-bold text-white">{formatCurrency(baseValue)}</span></div>
                                     <div className="flex justify-between items-center text-rose-400"><span className="text-[10px]">Commissione Rete (3%):</span><span className="font-bold">+{formatCurrency(executionFee)}</span></div>
-                                    {dynamicFee > 0 && <div className="flex justify-between items-center text-rose-400"><span className="text-[10px]">Extra Fee Limite:</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-2">
@@ -622,7 +631,7 @@ export default function App() {
                       <div className="mb-4 flex space-x-2">
                           <div className="flex-1">
                               <label className="text-[10px] text-slate-500 uppercase block mb-1">Quantità</label>
-                              <input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className={`transition-all duration-300 w-full bg-nebula-950/80 border ${dynamicFee > 0 && ui.orderType === 'live' ? 'border-rose-500' : 'border-nebula-border'} rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500`} />
+                              <input type="number" step="any" value={tradeQty} min="0.01" onChange={(e) => setTradeQty(e.target.value)} className={`transition-all duration-300 w-full bg-nebula-950/80 border border-nebula-border rounded-xl px-4 py-3 font-mono text-white text-lg font-bold outline-none focus:border-cyan-500`} />
                           </div>
                           {ui.orderType === 'limit' && (
                               <div className="flex-1">
@@ -636,8 +645,7 @@ export default function App() {
                       <div className="flex flex-col space-y-1 font-mono text-sm mb-6 pb-4 border-b border-nebula-border/50">
                         <div className="flex justify-between items-center"><span className="text-slate-400">Valore Asset:</span><span className="font-bold text-white">{formatCurrency(baseValue)}</span></div>
                         {ui.orderType === 'live' && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Commissione Rete (3%):</span><span className="font-bold">+{formatCurrency(executionFee)}</span></div>}
-                        {dynamicFee > 0 && ui.orderType === 'live' && <div className="flex justify-between items-center text-rose-400"><span className="text-xs">Extra Fee Limite Superato:</span><span className="font-bold">+{formatCurrency(dynamicFee)}</span></div>}
-                        {ui.orderType === 'live' && <div className="flex justify-between items-center text-emerald-400 mt-2 border-t border-nebula-border/50 pt-2"><span className="text-xs uppercase font-bold">Totale Ordine:</span><span className="font-bold">{formatCurrency(baseValue + executionFee + dynamicFee)}</span></div>}
+                        {ui.orderType === 'live' && <div className="flex justify-between items-center text-emerald-400 mt-2 border-t border-nebula-border/50 pt-2"><span className="text-xs uppercase font-bold">Totale Ordine:</span><span className="font-bold">{formatCurrency(baseValue + executionFee)}</span></div>}
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4 mt-auto">
@@ -725,7 +733,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* TAB NEBULACHANCE (SCOMMESSE) */}
+          {/* TAB NEBULACHANCE (SCOMMESSE V2) */}
           <div className={`h-full flex-col p-6 overflow-y-auto custom-scroll w-full ${ui.activeTab === 'chance' ? 'flex' : 'hidden'}`}>
              <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 flex items-center"><Ticket className="w-6 h-6 mr-3 text-purple-500"/> NebulaChance</h2>
@@ -736,28 +744,37 @@ export default function App() {
                      <div className="text-center p-12 text-slate-500 italic bg-nebula-900/40 rounded-xl border border-nebula-border">NebulaChance non ha al momento scommesse in corso.</div>
                  ) : (
                      Object.values(bets).filter(b => b.active).map(bet => {
-                         const totalVotes = bet.options.reduce((acc, o) => acc + o.votes.length, 0);
+                         const totalMoneyBet = bet.options.reduce((acc, opt) => acc + opt.bets.reduce((s, b) => s + b.amount, 0), 0);
                          return (
                          <div key={bet.id} className="bg-nebula-900/80 border border-purple-500/30 rounded-xl p-6 shadow-[0_10px_30px_rgba(168,85,247,0.15)] relative overflow-hidden animate-fade-in">
-                             <div className="flex justify-between items-center mb-4">
+                             <div className="flex justify-between items-start md:items-center flex-col md:flex-row mb-6 gap-4">
                                  <h3 className="text-xl font-bold text-white">{bet.name}</h3>
-                                 <div className="text-right">
-                                     <div className="text-sm font-mono text-purple-400 font-bold">Costo: {formatCurrency(bet.cost)}</div>
-                                     <div className="text-[10px] text-slate-400 uppercase tracking-widest">Vincita: +{bet.profitPct}%</div>
+                                 <div className="flex items-center space-x-2 bg-black/50 p-2 rounded-lg border border-purple-500/30">
+                                     <span className="text-xs text-slate-400 uppercase font-bold">La tua puntata:</span>
+                                     <input type="number" min="1" step="any" value={betAmounts[bet.id] || ''} onChange={e => setBetAmounts({...betAmounts, [bet.id]: parseFloat(e.target.value)})} placeholder="0 €" className="w-24 bg-nebula-950 border border-purple-500/50 rounded px-2 py-1.5 text-white font-mono outline-none text-right focus:border-purple-400" />
                                  </div>
                              </div>
                              
-                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-2">
                                  {bet.options.map((opt, i) => {
-                                     const pct = totalVotes === 0 ? 0 : ((opt.votes.length / totalVotes) * 100).toFixed(1);
-                                     const hasVotedThis = opt.votes.includes(user.id);
+                                     const optMoney = opt.bets.reduce((s, b) => s + b.amount, 0);
+                                     const pct = totalMoneyBet === 0 ? 0 : ((optMoney / totalMoneyBet) * 100).toFixed(1);
+                                     const hasVotedThis = opt.bets.some(b => b.userId === user.id);
                                      return (
                                      <div key={i} className="flex flex-col">
-                                         <button onClick={() => socket.emit('place_bet', { userId: user.id, betId: bet.id, optionIndex: i })} className={`py-3 rounded-lg font-bold border transition-colors mb-2 ${hasVotedThis ? 'bg-purple-600 border-purple-500 text-white' : 'bg-nebula-950 border-nebula-border text-slate-300 hover:border-purple-500'}`}>
-                                             {opt.name} {hasVotedThis && <Check className="w-4 h-4 inline ml-2"/>}
+                                         <button onClick={() => {
+                                             const amt = betAmounts[bet.id] || 0;
+                                             if(amt <= 0) return showToast("Inserisci un importo da scommettere in alto a destra.", "error");
+                                             socket.emit('place_bet', { userId: user.id, betId: bet.id, optionIndex: i, amount: amt });
+                                         }} className={`py-3 rounded-lg font-bold border transition-colors mb-2 flex flex-col items-center justify-center gap-1 ${hasVotedThis ? 'bg-purple-600 border-purple-500 text-white shadow-lg' : 'bg-nebula-950 border-nebula-border text-slate-300 hover:border-purple-500'}`}>
+                                             <span>{opt.name} {hasVotedThis && <Check className="w-4 h-4 inline ml-1"/>}</span>
+                                             <span className={`text-[10px] font-mono font-normal ${hasVotedThis ? 'text-purple-200' : 'text-slate-500'}`}>Quota: {opt.quote.toFixed(2)}x</span>
                                          </button>
-                                         <div className="text-[10px] text-right text-slate-400 mb-1">{pct}% ({opt.votes.length} puntate)</div>
-                                         <div className="w-full h-1 bg-nebula-950 rounded-full overflow-hidden">
+                                         <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                                             <span>{formatCurrency(optMoney)} puntati</span>
+                                             <span>{pct}%</span>
+                                         </div>
+                                         <div className="w-full h-1.5 bg-nebula-950 rounded-full overflow-hidden">
                                              <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${pct}%` }}></div>
                                          </div>
                                      </div>
@@ -865,12 +882,6 @@ export default function App() {
               <h2 className="text-2xl font-black flex items-center gap-3">
                   {user.isAdmin ? <><UserCog className="w-6 h-6 text-rose-500" /> <span className="text-rose-500">Dev / Admin Panel</span></> : <><FileCode2 className="w-6 h-6 text-emerald-500" /> <span className="text-emerald-500">Finanza Control Panel</span></>}
               </h2>
-              {/* TASTO MERCATO STRAORDINARIO (SOLO ADMIN) */}
-              {user.isAdmin && (
-                  <button onClick={() => socket.emit('admin_action', { type: 'toggle_extra_market' })} className={`px-4 py-2 font-bold rounded-lg border flex items-center shadow-lg transition-all duration-300 ${gameTime.isExtraordinary ? 'bg-rose-600 border-rose-500 text-white' : 'bg-nebula-800 border-nebula-border text-slate-400 hover:text-white'}`}>
-                    <Store className="w-4 h-4 mr-2"/> {gameTime.isExtraordinary ? 'SPEGNI Mercato Straordinario' : 'ACCENDI Mercato Straordinario'}
-                  </button>
-              )}
             </div>
 
             {/* SEZIONI CONDIVISE (FINANZA & ADMIN) */}
@@ -1019,53 +1030,8 @@ export default function App() {
             {/* SEZIONI ESCLUSIVE ADMIN (Non finanza) */}
             {user.isAdmin && (
             <>
-            {/* GESTIONE FONDI TASSE E DB */}
-            {dbBackupInfo && dbBackupInfo.funds && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="bg-nebula-900/60 p-6 border border-emerald-900/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.1)] md:col-span-2 transition-all">
-                    <h3 className="text-lg font-bold text-white mb-2 border-b border-emerald-900/50 pb-2 flex items-center"><Landmark className="w-5 h-5 mr-2 text-emerald-500"/> Gestione Fondi Tassazione (No Crypto)</h3>
-                    <p className="text-[10px] text-slate-400 mb-4">Lo Stato incassa il 55% dei prelievi, le aziende si dividono il 10%.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-nebula-950 p-4 rounded-lg border border-emerald-500/30 flex justify-between items-center">
-                            <div>
-                            <div className="text-[10px] text-emerald-500 uppercase font-bold tracking-wider mb-1">Fondo Statale (RP)</div>
-                            <div className="text-2xl font-mono text-white">{formatCurrency(dbBackupInfo.funds.state)}</div>
-                            </div>
-                            <button onClick={() => socket.emit('admin_withdraw_fund', { target: 'state' })} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition-colors">Preleva</button>
-                        </div>
-                        <div className="bg-nebula-950 p-4 rounded-lg border border-cyan-500/30">
-                            <div className="text-[10px] text-cyan-500 uppercase font-bold tracking-wider mb-3">Fondi Aziendali (Da erogare)</div>
-                            <div className="space-y-2 max-h-24 overflow-y-auto custom-scroll pr-2">
-                            {Object.entries(dbBackupInfo.funds.companies).map(([ticker, amount]) => amount > 0 && (
-                                <div key={ticker} className="flex justify-between items-center text-sm border-b border-nebula-border/50 pb-2">
-                                <span className="font-bold text-white">{ticker}</span>
-                                <div className="flex items-center space-x-3">
-                                    <span className="font-mono text-slate-300">{formatCurrency(amount)}</span>
-                                    <button onClick={() => socket.emit('admin_withdraw_fund', { target: ticker })} className="px-2 py-1 bg-cyan-600/30 text-cyan-400 hover:bg-cyan-600/50 text-[10px] rounded transition-colors">Preleva</button>
-                                </div>
-                                </div>
-                            ))}
-                            {Object.values(dbBackupInfo.funds.companies).every(v => v === 0) && <div className="text-xs text-slate-500">Nessun fondo aziendale accumulato.</div>}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md transition-all">
-                    <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Globe className="w-5 h-5 mr-2 text-cyan-500"/> DB Backup</h3>
-                    <p className="text-[10px] text-slate-400 mb-4">Salva prima di riavviare.</p>
-                    <div className="flex flex-col space-y-2">
-                        <button onClick={() => { downloadRequestedRef.current = true; socket.emit('admin_fetch_db'); }} className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded flex items-center justify-center text-xs transition-colors"><Download className="w-3 h-3 mr-2"/> Scarica JSON</button>
-                        <label className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded flex items-center justify-center cursor-pointer text-xs transition-colors">
-                        <Upload className="w-3 h-3 mr-2"/> Ripristina JSON
-                        <input type="file" accept=".json" className="hidden" onChange={handleRestoreDb} />
-                        </label>
-                    </div>
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              
               <div className="bg-nebula-900/60 p-6 border border-cyan-900/50 rounded-xl backdrop-blur-md flex flex-col transition-all">
                   <h3 className="text-lg font-bold text-white mb-2 border-b border-cyan-900/50 pb-2 flex items-center"><Newspaper className="w-5 h-5 mr-2 text-cyan-500"/> Notizie e Generatore</h3>
                   <div className="flex flex-col space-y-4 mt-2">
@@ -1094,26 +1060,34 @@ export default function App() {
                   </div>
               </div>
 
-              {/* NEBULACHANCE ADMIN */}
+              {/* NEBULACHANCE ADMIN (AGGIORNATO CON OPZIONI E QUOTE) */}
               <div className="bg-nebula-900/60 p-6 border border-purple-500/30 rounded-xl backdrop-blur-md flex flex-col transition-all">
                   <h3 className="text-lg font-bold text-purple-400 mb-2 border-b border-purple-500/30 pb-2 flex items-center"><Ticket className="w-5 h-5 mr-2"/> Generatore Scommesse (Chance)</h3>
-                  <div className="flex flex-col space-y-2 mt-2">
-                      <input type="text" placeholder="Es. Chi vincerà lo scudetto?" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      <div className="flex space-x-2">
-                          <input type="text" placeholder="Opzione 1 (Es. Roma)" value={newBet.option1} onChange={e => setNewBet({...newBet, option1: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 2 (Es. Inter)" value={newBet.option2} onChange={e => setNewBet({...newBet, option2: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                          <input type="text" placeholder="Opzione 3 (Opzionale)" value={newBet.option3} onChange={e => setNewBet({...newBet, option3: e.target.value})} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
-                      </div>
-                      <div className="flex space-x-2">
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Prezzo Biglietto (€)</label><input type="number" value={newBet.cost} onChange={e => setNewBet({...newBet, cost: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                          <div className="flex-1"><label className="text-[10px] text-slate-400">Profitto Vincita (%)</label><input type="number" value={newBet.profitPct} onChange={e => setNewBet({...newBet, profitPct: parseFloat(e.target.value)})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" /></div>
-                      </div>
+                  <div className="flex flex-col space-y-3 mt-2">
+                      <input type="text" placeholder="Domanda/Evento (Es. Chi vincerà lo scudetto?)" value={newBet.name} onChange={e => setNewBet({...newBet, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                      
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Opzioni e Quote (Es: 1.50 = +50% profitto)</label>
+                      {betOptions.map((opt, i) => (
+                          <div key={i} className="flex space-x-2">
+                              <input type="text" placeholder={`Opzione ${i+1}`} value={opt.name} onChange={e => { const newOpts = [...betOptions]; newOpts[i].name = e.target.value; setBetOptions(newOpts); }} className="flex-1 bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-xs outline-none" />
+                              <div className="relative">
+                                  <span className="absolute left-2 top-2 text-slate-500 text-xs font-mono">x</span>
+                                  <input type="number" step="0.01" min="1.01" value={opt.quote} onChange={e => { const newOpts = [...betOptions]; newOpts[i].quote = parseFloat(e.target.value); setBetOptions(newOpts); }} className="w-20 bg-nebula-950 border border-nebula-border rounded pl-5 pr-2 py-2 text-white text-xs outline-none font-mono" />
+                              </div>
+                              {betOptions.length > 2 && (
+                                  <button onClick={() => setBetOptions(betOptions.filter((_, idx) => idx !== i))} className="px-2 bg-rose-900/50 text-rose-400 rounded hover:bg-rose-600 hover:text-white"><X className="w-4 h-4"/></button>
+                              )}
+                          </div>
+                      ))}
+                      <button onClick={() => setBetOptions([...betOptions, {name:'', quote: 2.0}])} className="text-xs text-purple-400 border border-purple-500/30 border-dashed py-2 rounded hover:bg-purple-900/30 transition-colors">+ Aggiungi Opzione</button>
+
                       <button onClick={() => {
-                          const options = [newBet.option1, newBet.option2, newBet.option3].filter(o => o.trim() !== '');
-                          if(!newBet.name || options.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni.", "error");
-                          socket.emit('admin_action', { type: 'create_bet', name: newBet.name, cost: newBet.cost, profitPct: newBet.profitPct, options });
-                          setNewBet({ name: '', duration: '24h', cost: 100, profitPct: 50, option1: '', option2: '', option3: '' });
-                      }} className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors">Avvia Scommessa sul Sito</button>
+                          const validOptions = betOptions.filter(o => o.name.trim() !== '' && !isNaN(o.quote) && o.quote > 0);
+                          if(!newBet.name || validOptions.length < 2) return showToast("Inserisci un nome e almeno 2 opzioni valide.", "error");
+                          socket.emit('admin_action', { type: 'create_bet', name: newBet.name, options: validOptions });
+                          setNewBet({ name: '' });
+                          setBetOptions([{ name: '', quote: 2.0 }, { name: '', quote: 2.0 }]);
+                      }} className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded transition-colors mt-2">Avvia Scommessa sul Sito</button>
                   </div>
                   
                   {/* Risoluzione Scommesse Attive */}
@@ -1123,11 +1097,11 @@ export default function App() {
                           {Object.values(bets).filter(b => b.active).map(bet => (
                               <div key={bet.id} className="bg-black/40 p-3 rounded mb-2 border border-purple-500/30">
                                   <div className="font-bold text-white text-xs mb-2">{bet.name}</div>
-                                  <div className="flex space-x-2">
+                                  <div className="flex flex-wrap gap-2">
                                       {bet.options.map((opt, i) => (
                                           <button key={i} onClick={() => {
                                               if(window.confirm(`Selezionare "${opt.name}" come vincente e pagare i vincitori?`)) socket.emit('admin_action', { type: 'resolve_bet', betId: bet.id, winningIndex: i });
-                                          }} className="flex-1 bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-1 rounded border border-purple-500/50">Vince: {opt.name}</button>
+                                          }} className="flex-1 min-w-[80px] bg-purple-900/50 hover:bg-purple-600 text-[10px] text-white py-2 rounded border border-purple-500/50">Vince: {opt.name}</button>
                                       ))}
                                   </div>
                               </div>
@@ -1194,54 +1168,6 @@ export default function App() {
                   </div>
                 </div>
             </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
-                  <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Modifica Parametri Asset (Live)</h3>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div className="col-span-2"><label className="text-xs text-slate-400 block mb-1">Seleziona Asset</label><select value={adminPriceEdit.ticker} onChange={e => setAdminPriceEdit({ ...adminPriceEdit, ticker: e.target.value })} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none">{Object.keys(assets || {}).map(k => <option key={k} value={k}>{k}</option>)}</select></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Forza Prezzo (€)</label><input type="number" step="any" id="adm-prc" className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Volatilità Base</label><input type="number" step="any" value={adminPriceEdit.vol} onChange={e=>setAdminPriceEdit({...adminPriceEdit, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" placeholder="Es. 0.02" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Limite Max Azioni</label><input type="number" value={adminPriceEdit.maxShares} onChange={e=>setAdminPriceEdit({...adminPriceEdit, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={adminPriceEdit.holdingTax} onChange={e=>setAdminPriceEdit({...adminPriceEdit, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Prezzo MAX (Tetto)</label><input type="number" value={adminPriceEdit.maxPrice} onChange={e=>setAdminPriceEdit({...adminPriceEdit, maxPrice: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Prezzo MIN (Pavimento)</label><input type="number" step="any" value={adminPriceEdit.minPrice} onChange={e=>setAdminPriceEdit({...adminPriceEdit, minPrice: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white font-mono outline-none" /></div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2 border-t border-rose-900/50 pt-4">
-                    <button onClick={() => {
-                      if(document.getElementById('adm-prc').value) socket.emit('admin_action', { type: 'price', ticker: adminPriceEdit.ticker, price: parseFloat(document.getElementById('adm-prc').value) });
-                      socket.emit('admin_action', { type: 'edit_asset', ticker: adminPriceEdit.ticker, updates: { vol: adminPriceEdit.vol, maxShares: adminPriceEdit.maxShares, maxPrice: adminPriceEdit.maxPrice, minPrice: adminPriceEdit.minPrice, holdingTax: adminPriceEdit.holdingTax } });
-                    }} className="col-span-2 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded text-xs transition-colors">Aggiorna Asset</button>
-                    <button onClick={() => socket.emit('admin_action', { type: 'reset_chart', ticker: adminPriceEdit.ticker })} className="col-span-1 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded text-xs flex items-center justify-center transition-colors"><RefreshCw className="w-3 h-3 mr-1"/> Reset</button>
-                  </div>
-                </div>
-
-                <div className="bg-nebula-900/60 p-6 border border-rose-900/50 rounded-xl backdrop-blur-md transition-all">
-                  <h3 className="text-lg font-bold text-white mb-4 border-b border-rose-900/50 pb-2">Aggiunta Nuove Compagnie / Crypto (IPO)</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <div><label className="text-xs text-slate-400 block mb-1">Mercato</label><select value={newAsset.type} onChange={e => setNewAsset({...newAsset, type: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none"><option value="stocks">Azioni Standard</option><option value="crypto">Crypto Standard</option></select></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Ticker (Es. AAPL)</label><input type="text" maxLength="5" value={newAsset.ticker} onChange={e => setNewAsset({...newAsset, ticker: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm uppercase outline-none" /></div>
-                    <div className="md:col-span-2"><label className="text-xs text-slate-400 block mb-1">Nome Completo</label><input type="text" value={newAsset.name} onChange={e => setNewAsset({...newAsset, name: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    
-                    <div><label className="text-xs text-slate-400 block mb-1">Prezzo Iniziale (€)</label><input type="number" step="0.1" value={newAsset.price} onChange={e => setNewAsset({...newAsset, price: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Volatilità (Es. 0.02)</label><input type="number" step="0.01" value={newAsset.vol} onChange={e => setNewAsset({...newAsset, vol: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Limite Azioni Globale</label><input type="number" value={newAsset.maxShares} onChange={e => setNewAsset({...newAsset, maxShares: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Tassa Hold (€/pz)</label><input type="number" step="any" value={newAsset.holdingTax} onChange={e => setNewAsset({...newAsset, holdingTax: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    
-                    <div><label className="text-xs text-slate-400 block mb-1">Settore</label><input type="text" value={newAsset.sector} onChange={e => setNewAsset({...newAsset, sector: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Market Cap</label><input type="text" value={newAsset.mcap} onChange={e => setNewAsset({...newAsset, mcap: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">CEO</label><input type="text" value={newAsset.ceo} onChange={e => setNewAsset({...newAsset, ceo: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    <div><label className="text-xs text-slate-400 block mb-1">Dipendenti</label><input type="text" value={newAsset.employees} onChange={e => setNewAsset({...newAsset, employees: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                    
-                    <div className="md:col-span-4"><label className="text-xs text-slate-400 block mb-1">Descrizione Lunga</label><input type="text" value={newAsset.desc} onChange={e => setNewAsset({...newAsset, desc: e.target.value})} className="w-full bg-nebula-950 border border-nebula-border rounded px-3 py-2 text-white text-sm outline-none" /></div>
-                  </div>
-                  <button onClick={() => {
-                    if (!newAsset.ticker || !newAsset.name) return showToast("Compila almeno Ticker e Nome.", "error");
-                    socket.emit('admin_action', { type: 'ipo', asset: newAsset });
-                    showToast("Lancio IPO effettuato sul server centrale.", "success");
-                  }} className="w-full py-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition-colors">Aggiungi Definitivamente al Mercato (IPO)</button>
-                </div>
-            </div>
             </>
             )}
 
@@ -1282,13 +1208,8 @@ export default function App() {
               <>
                 <div className="text-xs text-slate-400 mb-4 text-center">
                   <p className="mb-2">Prelievo Minimo: 100€</p>
-                  {(user.isPro || user.isProMax) ? (
-                      <p className="text-emerald-400 mb-2 font-bold">Vantaggio VIP: Prelievi Giornalieri Illimitati</p>
-                  ) : (
-                      <p className="text-emerald-400 mb-2">Prelievi oggi: {user.withdrawalsToday || 0} / 3</p>
-                  )}
                   <div className="grid grid-cols-2 gap-1 text-[10px] text-left border border-nebula-border p-2 rounded mb-3 text-rose-400 font-bold justify-center items-center">
-                      <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 65%</span>
+                      <span className="col-span-2 text-center text-sm py-2">Tassa Fissa: 35%</span>
                   </div>
                 </div>
                 <input type="number" id="dm-amount" defaultValue="100" min="100" step="any" className="w-full bg-nebula-950 border border-nebula-border rounded-lg py-3 px-4 text-white font-mono font-bold text-lg mb-4 outline-none focus:border-cyan-500 transition-colors" />
