@@ -13,7 +13,7 @@ import tottiImg from './totti.png';
 
 const DISCORD_CLIENT_ID = "1544048974175019058";
 // MODIFICA QUI IL LINK DEL TUO BACKEND QUANDO CAMBIA SU CLOUDFLARE
-const BACKEND_URL = "https://miracle-varieties-beyond-excitement.trycloudflare.com"; 
+const BACKEND_URL = "https://queensland-students-investigators-adds.trycloudflare.com"; 
 
 let socket;
 
